@@ -1,11 +1,11 @@
 # app.py
 from pathlib import Path
+import os
 
 from dash import Dash, html, dcc, Input, Output, State, callback_context, no_update
 
 import dash_cytoscape as cyto
-from src.data_loader import load_gates_csv
-from src.csv_to_cyto import csv_to_cyto
+from src.wsp_to_cyto import wsp_to_cyto
 from src.styles_cyto import cyto_stylesheet
 
 
@@ -85,9 +85,18 @@ def make_layout(name: str):
 app = Dash(__name__)
 
 # --- Data ---
-CSV_PATH = Path("/Users/imu2/Documents/PycharmProjects/Gating_Tree_Depiction/outputs/Tv2_gates.csv")
-df = load_gates_csv(CSV_PATH)
-elements_all = csv_to_cyto(df)
+# Load gating tree directly from a FlowJo .wsp file
+wsp_path = (Path(os.getcwd()).parent / 'inputs' / 'FlowJo_tutorial.wsp')
+# wsp_to_cyto returns: { "nodes": [...], "edges": [...] }
+cy = wsp_to_cyto(wsp_path)
+# Cytoscape wants a single list containing both node + edge elements
+elements_all = cy["nodes"] + cy["edges"]
+
+# Remove leaves initially
+elements_filtered, initial_leaves = filter_out_leaves(elements_all, keep_root=True)
+print(f"⚡ Loaded WSP with {len(elements_filtered)} elements (removed {len(initial_leaves)} leaves)")
+
+elements = elements_filtered
 
 elements_filtered, initial_leaves = filter_out_leaves(elements_all, keep_root=True)
 print(f"⚡ Loaded with {len(elements_filtered)} nodes (removed {len(initial_leaves)} leaves)")
