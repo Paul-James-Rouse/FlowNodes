@@ -1,9 +1,19 @@
 # wsp_to_cyto.py
 import flowkit as fk
 from pathlib import PurePath
+from typing import Dict, List
 
-def extract_gate_paths_from_wsp(wsp_path):
 
+def extract_gate_paths_from_wsp(wsp_path) -> Dict[str, List[PurePath]]:
+    """
+    Extract gating tree paths from a FlowJo workspace file.
+    
+    Args:
+        wsp_path: Path to the .wsp file
+        
+    Returns:
+        Dictionary mapping group names to lists of PurePath objects representing gate paths
+    """
     # Use Flowkit to parse wsp
     wsp = fk.parse_wsp(wsp_path)
 
@@ -32,22 +42,28 @@ def extract_gate_paths_from_wsp(wsp_path):
 
         # iterate over tuple paths
         for gate_path_tuple in group_data[gate_key].keys():
-            gate = ''
-
-            # parse tuple elements into string path
-            for val in gate_path_tuple:
-                gate += str(val).strip() + ' / '
-
-            gt.append(PurePath(gate))
+            # parse tuple elements into path components
+            path_parts = [str(val).strip() for val in gate_path_tuple if str(val).strip()]
+            
+            # build path from components (join with forward slash, no trailing spaces)
+            if path_parts:
+                gate_path = PurePath("/".join(path_parts))
+                gt.append(gate_path)
 
         # store this group's paths
         group_gate_dict[group_name] = gt
 
     return group_gate_dict
 
-def wsp_to_cyto(wsp_path):
+def wsp_to_cyto(wsp_path) -> Dict[str, List[Dict]]:
     """
     Convert FlowJo wsp gating tree into Cytoscape nodes + edges.
+    
+    Args:
+        wsp_path: Path to the .wsp file
+        
+    Returns:
+        Dictionary with "nodes" and "edges" keys, each containing a list of Cytoscape elements
     """
     groups = extract_gate_paths_from_wsp(wsp_path)
 
@@ -60,7 +76,12 @@ def wsp_to_cyto(wsp_path):
         seen_nodes = set()
 
         for path in paths:
-            parts = [p.strip() for p in str(path).split("/") if p.strip()]
+            # PurePath.parts gives us the path components directly
+            parts = [part for part in path.parts if part.strip()]
+
+            # Skip empty paths
+            if not parts:
+                continue
 
             # build unique node ID
             node_id = "_".join(parts)  # e.g. root_Lymphocytes_CD3+

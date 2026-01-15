@@ -17,6 +17,16 @@ def cyto_stylesheet():
         # If node_colour is set in data, prefer it
         {"selector": "node[ node_colour ]",
          "style": { "background-color": "data(node_colour)" }},
+        # If node_shape is set in data, use it
+        {"selector": "node[ node_shape ]",
+         "style": { "shape": "data(node_shape)" }},
+        # Root node - black star for easy identification (must come after node_colour/node_shape to override)
+        {"selector": "node[id = 'root']",
+         "style": {
+             "background-color": "#000000",
+             "shape": "star",
+             "border-color": "#000000",
+         }},
 
         # Panel-specific class example
         {"selector": ".panel-Tv2",
