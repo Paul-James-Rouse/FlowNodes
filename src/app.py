@@ -1,6 +1,12 @@
 # app.py
 from pathlib import Path
 import os
+import io
+import base64
+
+import pandas as pd
+import matplotlib.cm as cm
+import matplotlib.colors as mcolors
 
 from dash import Dash, html, dcc, Input, Output, State, callback_context, no_update, ALL
 
@@ -31,6 +37,46 @@ def filter_out_leaves(all_elements, keep_root=True):
         if e["data"]["source"] not in leaves and e["data"]["target"] not in leaves
     ]
     return kept_nodes + kept_edges, sorted(leaves)
+
+
+def get_all_downstream_nodes(node_id, all_elements):
+    """
+    Find all downstream nodes (descendants) from a given node.
+    Uses breadth-first search to traverse the graph.
+    
+    Args:
+        node_id: The ID of the starting node
+        all_elements: List of all graph elements (nodes + edges)
+        
+    Returns:
+        Set of node IDs that are downstream from the given node
+    """
+    if not all_elements or not node_id:
+        return set()
+    
+    # Build adjacency list (parent -> children)
+    edges = [el["data"] for el in all_elements if "source" in el.get("data", {})]
+    children_map = {}
+    for edge in edges:
+        source = edge.get("source")
+        target = edge.get("target")
+        if source not in children_map:
+            children_map[source] = []
+        children_map[source].append(target)
+    
+    # BFS to find all descendants
+    downstream_nodes = set()
+    queue = [node_id]
+    
+    while queue:
+        current = queue.pop(0)
+        if current in children_map:
+            for child in children_map[current]:
+                if child not in downstream_nodes:
+                    downstream_nodes.add(child)
+                    queue.append(child)
+    
+    return downstream_nodes
 
 
 def get_color_palette():
@@ -327,6 +373,48 @@ def show_node_info(data, all_elements=None):
             ],
             style={"marginBottom": "1rem"},
         ),
+        html.Div(
+            [
+                html.Label("Apply to all downstream:", style={"display": "block", "marginBottom": "0.5rem", "fontWeight": "bold"}),
+                html.Div(
+                    [
+                        html.Button(
+                            "Apply Color",
+                            id={"type": "btn-apply-downstream", "action": "color", "node_id": node_id},
+                            n_clicks=0,
+                            style={
+                                "flex": "1",
+                                "marginRight": "0.5rem",
+                                "padding": "0.5rem 1rem",
+                                "fontSize": "0.85rem",
+                                "cursor": "pointer",
+                                "border": "1px solid #4CAF50",
+                                "borderRadius": "4px",
+                                "backgroundColor": "#4CAF50",
+                                "color": "#fff",
+                            },
+                        ),
+                        html.Button(
+                            "Apply Shape",
+                            id={"type": "btn-apply-downstream", "action": "shape", "node_id": node_id},
+                            n_clicks=0,
+                            style={
+                                "flex": "1",
+                                "padding": "0.5rem 1rem",
+                                "fontSize": "0.85rem",
+                                "cursor": "pointer",
+                                "border": "1px solid #2196F3",
+                                "borderRadius": "4px",
+                                "backgroundColor": "#2196F3",
+                                "color": "#fff",
+                            },
+                        ),
+                    ],
+                    style={"display": "flex", "width": "100%"},
+                ),
+            ],
+            style={"marginBottom": "1rem"},
+        ),
         html.Hr(),
     ]
     
@@ -400,9 +488,9 @@ def make_layout(name: str, **params):
     """
     base_layout = {
         "name": name,
-        "directed": True,
-        "animate": False,
-    }
+            "directed": True,
+            "animate": False,
+        }
     
     if name == "breadthfirst":
         base_layout.update({
@@ -413,7 +501,7 @@ def make_layout(name: str, **params):
         base_layout.update({
             "padding": params.get("padding", 75),
             "randomize": False,
-            "nodeOverlap": 1,
+        "nodeOverlap": 1,
             "nodeRepulsion": params.get("nodeRepulsion", 20_000),
             "idealEdgeLength": params.get("idealEdgeLength", 1),
         })
@@ -505,23 +593,24 @@ app.index_string = '''
 app.layout = html.Div(
     [
         *stores,
+        dcc.Download(id="download-csv"),
         html.Div(
             [
                 # Top Left: Cytoscape Graph
                 html.Div(
                     [
                         html.H4("Network Visualization", style={"marginTop": 0}),
-                        cyto.Cytoscape(
-                            id="cyto-graph",
-                            elements=elements,
+                cyto.Cytoscape(
+                    id="cyto-graph",
+                    elements=elements,
                             layout=make_layout("breadthfirst"),
-                            stylesheet=cyto_stylesheet(),
+                    stylesheet=cyto_stylesheet(),
                             style={"height": "calc(70vh - 80px)", "width": "100%", "backgroundColor": "#ffffff"},
-                            minZoom=0.2,
-                            maxZoom=2.5,
-                            boxSelectionEnabled=True,
-                        ),
-                    ],
+                    minZoom=0.2,
+                    maxZoom=2.5,
+                    boxSelectionEnabled=True,
+                ),
+            ],
                     style={
                         **WINDOW_STYLE,
                         "gridColumn": "1",
@@ -530,8 +619,8 @@ app.layout = html.Div(
                     },
                 ),
                 # Top Right: Node Information
-                html.Div(
-                    [
+        html.Div(
+            [
                         html.Div(id="node-info-panel", children="Click a node to see details."),
                     ],
                     style={
@@ -686,7 +775,46 @@ app.layout = html.Div(
                                 "borderRadius": "4px",
                                 "backgroundColor": "#fff",
                                 "color": "#333",
+                                "marginBottom": "1rem",
                             },
+                        ),
+                        html.Button(
+                            "Export CSV",
+                            id="btn-export-csv",
+                            n_clicks=0,
+                            style={
+                                "width": "100%",
+                                "padding": "0.5rem 1rem",
+                                "fontSize": "0.9rem",
+                                "cursor": "pointer",
+                                "border": "1px solid #ccc",
+                                "borderRadius": "4px",
+                                "backgroundColor": "#fff",
+                                "color": "#333",
+                                "marginBottom": "1rem",
+                            },
+                        ),
+                        dcc.Upload(
+                            id="upload-csv",
+                            children=html.Div([
+                                "Drag and Drop or ",
+                                html.A("Select CSV File")
+                            ]),
+                            style={
+                                "width": "100%",
+                                "height": "60px",
+                                "lineHeight": "60px",
+                                "borderWidth": "1px",
+                                "borderStyle": "dashed",
+                                "borderRadius": "4px",
+                                "textAlign": "center",
+                                "marginBottom": "1rem",
+                                "cursor": "pointer",
+                                "backgroundColor": "#fafafa",
+                                "borderColor": "#ccc",
+                                "color": "#333",
+                            },
+                            multiple=False,
                         ),
                     ],
                     style={
@@ -925,14 +1053,202 @@ def update_node_properties(label_values, shape_values, all_elements, current_ele
 def export_current_view(n_clicks):
     if not n_clicks:
         return no_update
-    # Export exactly what's on screen (viewport)
+    # Export full graph at high resolution
     return {
         "type": "png",
         "action": "download",
         "filename": f"gating_network_view_{n_clicks}",
-        "scale": 1000,  # dpi
-        "full": True
+        "options": {
+            "full": True,
+            "scale": 10,  # 10x multiplier for very high resolution
+            "maxWidth": 8000,  # Prevent browser crashes on very large networks
+            "maxHeight": 8000,
+            "bg": "#ffffff"  # Explicit white background
+        }
     }
+
+
+@app.callback(
+    Output("download-csv", "data"),
+    Input("btn-export-csv", "n_clicks"),
+    State("all-elements", "data"),
+    prevent_initial_call=True,
+)
+def export_network_to_csv(n_clicks, all_elements):
+    """
+    Export network nodes to CSV with columns: node_name, shape, color, parameter
+    """
+    if not n_clicks or not all_elements:
+        return no_update
+    
+    # Extract all nodes
+    nodes = [el for el in all_elements if el.get("data") and "source" not in el.get("data", {})]
+    
+    # Build DataFrame
+    rows = []
+    for node in nodes:
+        data = node.get("data", {})
+        rows.append({
+            "node_name": data.get("label", data.get("id", "Unknown")),
+            "shape": data.get("node_shape", "ellipse"),
+            "color": data.get("node_colour", "#A0C4FF"),
+            "parameter": ""  # Empty column for user to fill
+        })
+    
+    df = pd.DataFrame(rows)
+    
+    # Convert to CSV string
+    csv_string = df.to_csv(index=False)
+    
+    # Return download data
+    return {
+        "content": csv_string,
+        "filename": f"network_export_{n_clicks}.csv",
+        "type": "text/csv"
+    }
+
+
+@app.callback(
+    Output("cyto-graph", "elements", allow_duplicate=True),
+    Output("all-elements", "data", allow_duplicate=True),
+    Output("upload-csv", "children", allow_duplicate=True),
+    Input("upload-csv", "contents"),
+    State("upload-csv", "filename"),
+    State("all-elements", "data"),
+    State("cyto-graph", "elements"),
+    prevent_initial_call=True,
+)
+def import_csv_and_apply_colors(contents, filename, all_elements, current_elements):
+    """
+    Import CSV file and apply viridis color scheme based on parameter column
+    """
+    if not contents or not filename:
+        return no_update, no_update, no_update
+    
+    # Parse uploaded file
+    try:
+        content_type, content_string = contents.split(',')
+        decoded = base64.b64decode(content_string)
+        
+        # Read CSV with pandas
+        df = pd.read_csv(io.StringIO(decoded.decode('utf-8')))
+        
+        # Validate required columns
+        required_columns = ["node_name", "shape", "color", "parameter"]
+        if not all(col in df.columns for col in required_columns):
+            return no_update, no_update, html.Div([
+                "Error: CSV must have columns: " + ", ".join(required_columns),
+                html.Br(),
+                "Drag and Drop or ",
+                html.A("Select CSV File")
+            ])
+        
+        # Filter out rows with missing parameter values
+        df_valid = df[df["parameter"].notna() & (df["parameter"] != "")]
+        
+        # Convert parameter to numeric, coercing errors to NaN
+        df_valid["parameter"] = pd.to_numeric(df_valid["parameter"], errors='coerce')
+        df_valid = df_valid[df_valid["parameter"].notna()]
+        
+        if len(df_valid) == 0:
+            return no_update, no_update, html.Div([
+                "Error: No valid numeric parameter values found",
+                html.Br(),
+                "Drag and Drop or ",
+                html.A("Select CSV File")
+            ])
+        
+        # Calculate min/max for normalization
+        param_min = df_valid["parameter"].min()
+        param_max = df_valid["parameter"].max()
+        
+        # Handle case where all parameters are the same
+        if param_min == param_max:
+            normalized_values = [0.5] * len(df_valid)  # Use middle of viridis
+        else:
+            normalized_values = (df_valid["parameter"] - param_min) / (param_max - param_min)
+        
+        # Get viridis colormap
+        viridis = cm.get_cmap('viridis')
+        
+        # Create mapping of node_name to viridis color
+        node_color_map = {}
+        missing_nodes = []
+        
+        # Convert normalized_values to list for easier indexing
+        if isinstance(normalized_values, pd.Series):
+            normalized_list = normalized_values.tolist()
+        else:
+            normalized_list = list(normalized_values) if hasattr(normalized_values, '__iter__') else [normalized_values]
+        
+        # Reset index to ensure sequential indexing
+        df_valid = df_valid.reset_index(drop=True)
+        
+        for idx, row in df_valid.iterrows():
+            node_name = str(row["node_name"])
+            normalized = normalized_list[idx]
+            rgb = viridis(normalized)[:3]  # Get RGB (first 3 values)
+            hex_color = mcolors.rgb2hex(rgb)
+            
+            # Find matching node
+            node_found = False
+            for el in all_elements:
+                if "source" not in el.get("data", {}):
+                    node_data = el.get("data", {})
+                    if node_data.get("label") == node_name or node_data.get("id") == node_name:
+                        node_color_map[node_data.get("id")] = hex_color
+                        node_found = True
+                        break
+            
+            if not node_found:
+                missing_nodes.append(node_name)
+        
+        # Update all_elements
+        updated_all = []
+        for el in all_elements:
+            el_copy = el.copy()
+            if "source" not in el.get("data", {}):  # It's a node
+                node_id = el["data"].get("id")
+                if node_id in node_color_map:
+                    el_copy["data"] = el["data"].copy()
+                    el_copy["data"]["node_colour"] = node_color_map[node_id]
+            updated_all.append(el_copy)
+        
+        # Update current_elements
+        updated_current = []
+        for el in current_elements:
+            el_copy = el.copy()
+            if "source" not in el.get("data", {}):  # It's a node
+                node_id = el["data"].get("id")
+                if node_id in node_color_map:
+                    el_copy["data"] = el["data"].copy()
+                    el_copy["data"]["node_colour"] = node_color_map[node_id]
+            updated_current.append(el_copy)
+        
+        # Create upload component message
+        if missing_nodes:
+            warning_msg = f"Warning: {len(missing_nodes)} node(s) not found: {', '.join(missing_nodes[:5])}"
+            if len(missing_nodes) > 5:
+                warning_msg += f" and {len(missing_nodes) - 5} more"
+            upload_children = html.Div([
+                html.Div(warning_msg, style={"color": "#ff9800", "marginBottom": "0.5rem"}),
+                "Drag and Drop or ",
+                html.A("Select CSV File")
+            ])
+        else:
+            upload_children = html.Div([
+                html.Div(f"Successfully imported {len(df_valid)} nodes", style={"color": "#4CAF50", "marginBottom": "0.5rem"})
+            ])
+        
+        return updated_current, updated_all, upload_children
+        
+    except Exception as e:
+        error_msg = f"Error importing CSV: {str(e)}"
+        return no_update, no_update, html.Div([
+            html.Div(error_msg, style={"color": "#f44336", "marginBottom": "0.5rem"}),
+            "Drag and Drop or ",
+            html.A("Select CSV File")
+        ])
 
 
 @app.callback(
@@ -1283,6 +1599,116 @@ def apply_color_from_picker(
         updated_styles = [color_preview_style]
     
     return updated_current, updated_all, False, modal_style, updated_styles
+
+
+@app.callback(
+    Output("cyto-graph", "elements", allow_duplicate=True),
+    Output("all-elements", "data", allow_duplicate=True),
+    Input({"type": "btn-apply-downstream", "action": "color", "node_id": ALL}, "n_clicks"),
+    Input({"type": "btn-apply-downstream", "action": "shape", "node_id": ALL}, "n_clicks"),
+    State("selected-node-id", "data"),
+    State("all-elements", "data"),
+    State("cyto-graph", "elements"),
+    State({"type": "node-edit-input", "field": "node_shape", "node_id": ALL}, "value"),
+    prevent_initial_call=True,
+)
+def apply_to_all_downstream(
+    color_clicks, shape_clicks, selected_node_id, all_elements, current_elements, shape_values
+):
+    """
+    Apply color or shape to all downstream nodes from the selected node.
+    Uses the current color/shape of the selected node.
+    """
+    if not selected_node_id or not all_elements or not current_elements:
+        return no_update, no_update
+    
+    triggered = callback_context.triggered[0] if callback_context.triggered else None
+    if not triggered:
+        return no_update, no_update
+    
+    # Parse the triggered prop_id to get which action was clicked
+    prop_id = triggered["prop_id"]
+    if "btn-apply-downstream" not in prop_id:
+        return no_update, no_update
+    
+    # Extract action and node_id from the prop_id
+    import json
+    try:
+        json_part = prop_id.split(".n_clicks")[0]
+        button_info = json.loads(json_part)
+        action = button_info.get("action")
+        node_id = button_info.get("node_id")
+    except:
+        return no_update, no_update
+    
+    # Verify this is for the selected node
+    if node_id != selected_node_id:
+        return no_update, no_update
+    
+    # Check if there was an actual click
+    if action == "color":
+        if not color_clicks or not any(x and x > 0 for x in color_clicks):
+            return no_update, no_update
+        # Get the current color from the selected node
+        selected_color = None
+        for el in all_elements:
+            if "source" not in el.get("data", {}) and el["data"].get("id") == selected_node_id:
+                selected_color = el["data"].get("node_colour", "#A0C4FF")
+                break
+        if not selected_color:
+            return no_update, no_update
+    elif action == "shape":
+        if not shape_clicks or not any(x and x > 0 for x in shape_clicks):
+            return no_update, no_update
+        # Get the current shape value from the dropdown
+        if not shape_values or not any(v for v in shape_values):
+            return no_update, no_update
+        # Find the shape value for the selected node
+        selected_shape = None
+        for val in shape_values:
+            if val:
+                selected_shape = val
+                break
+        if not selected_shape:
+            return no_update, no_update
+    else:
+        return no_update, no_update
+    
+    # Get all downstream nodes
+    downstream_node_ids = get_all_downstream_nodes(selected_node_id, all_elements)
+    
+    if not downstream_node_ids:
+        return no_update, no_update
+    
+    # Update all_elements
+    updated_all = []
+    for el in all_elements:
+        el_copy = el.copy()
+        if "source" not in el.get("data", {}):  # It's a node
+            node_id = el["data"].get("id")
+            if node_id in downstream_node_ids:
+                el_copy["data"] = el["data"].copy()
+                if action == "color":
+                    el_copy["data"]["node_colour"] = selected_color
+                elif action == "shape":
+                    el_copy["data"]["node_shape"] = selected_shape
+        updated_all.append(el_copy)
+    
+    # Update current_elements
+    updated_current = []
+    for el in current_elements:
+        el_copy = el.copy()
+        if "source" not in el.get("data", {}):  # It's a node
+            node_id = el["data"].get("id")
+            if node_id in downstream_node_ids:
+                el_copy["data"] = el["data"].copy()
+                if action == "color":
+                    el_copy["data"]["node_colour"] = selected_color
+                elif action == "shape":
+                    el_copy["data"]["node_shape"] = selected_shape
+        updated_current.append(el_copy)
+    
+    return updated_current, updated_all
 
 
 # --- Main ---
