@@ -2,7 +2,7 @@
 from pathlib import Path
 import os
 
-from dash import Dash, html, dcc, Input, Output, State, callback_context, no_update
+from dash import Dash, html, dcc, Input, Output, State, callback_context, no_update, ALL
 
 import dash_cytoscape as cyto
 from wsp_to_cyto import wsp_to_cyto
@@ -33,71 +33,181 @@ def filter_out_leaves(all_elements, keep_root=True):
     return kept_nodes + kept_edges, sorted(leaves)
 
 
-def show_node_info(data):
+def show_node_info(data, all_elements=None):
     """
-    Display node information with name and color prominently.
+    Display node information with name, color, parent, and children.
     """
     if not data:
-        return html.Div("Click a node to see details.", style={"padding": "1rem"})
+        return html.Div("Click a node to see details.")
     
     # Get node name (label)
     node_name = data.get("label", data.get("id", "Unknown"))
+    node_id = data.get("id", "")
     
     # Get node color - check if node_colour is in data, otherwise use default
     node_color = data.get("node_colour", "#A0C4FF")
     
+    # Find parent and children from graph structure
+    parent_node = None
+    children_nodes = []
+    
+    if all_elements and node_id:
+        # Separate nodes and edges
+        nodes = {el["data"]["id"]: el["data"] for el in all_elements if "source" not in el.get("data", {})}
+        edges = [el["data"] for el in all_elements if "source" in el.get("data", {})]
+        
+        # Find parent (edge where this node is the target)
+        for edge in edges:
+            if edge.get("target") == node_id:
+                parent_id = edge.get("source")
+                if parent_id in nodes:
+                    parent_node = nodes[parent_id]
+                break
+        
+        # Find children (edges where this node is the source)
+        for edge in edges:
+            if edge.get("source") == node_id:
+                child_id = edge.get("target")
+                if child_id in nodes:
+                    children_nodes.append(nodes[child_id])
+    
+    # Get node shape - check if node_shape is in data, otherwise use default
+    node_shape = data.get("node_shape", "ellipse")
+    
     # Build the display
-    return html.Div(
-        [
-            html.H4("Node Information", style={"marginTop": 0, "marginBottom": "1rem"}),
+    info_sections = [
+        html.H4("Node Information", style={"marginTop": 0, "marginBottom": "1rem"}),
+        html.Div(
+            [
+                html.Label("Name:", style={"display": "block", "marginBottom": "0.25rem", "fontWeight": "bold"}),
+                dcc.Input(
+                    id={"type": "node-edit-input", "field": "label", "node_id": node_id},
+                    type="text",
+                    value=node_name,
+                    style={
+                        "width": "100%",
+                        "padding": "0.5rem",
+                        "fontSize": "1rem",
+                        "border": "1px solid #ccc",
+                        "borderRadius": "4px",
+                    },
+                ),
+            ],
+            style={"marginBottom": "1rem"},
+        ),
+        html.Div(
+            [
+                html.Label("Color:", style={"display": "block", "marginBottom": "0.25rem", "fontWeight": "bold"}),
+                html.Div(
+                    [
+                        html.Div(
+                            id={"type": "node-color-preview", "node_id": node_id},
+                            style={
+                                "width": "50px",
+                                "height": "40px",
+                                "backgroundColor": node_color,
+                                "border": "1px solid #333",
+                                "borderRadius": "4px",
+                                "marginRight": "0.5rem",
+                                "flexShrink": 0,
+                            },
+                        ),
+                        dcc.Input(
+                            id={"type": "node-edit-input", "field": "node_colour", "node_id": node_id},
+                            type="text",
+                            value=node_color,
+                            placeholder="#A0C4FF",
+                            style={
+                                "flex": "1",
+                                "padding": "0.5rem",
+                                "fontSize": "0.9rem",
+                                "fontFamily": "monospace",
+                                "border": "1px solid #ccc",
+                                "borderRadius": "4px",
+                            },
+                        ),
+                    ],
+                    style={"display": "flex", "alignItems": "center"},
+                ),
+            ],
+            style={"marginBottom": "1rem"},
+        ),
+        html.Div(
+            [
+                html.Label("Shape:", style={"display": "block", "marginBottom": "0.25rem", "fontWeight": "bold"}),
+                dcc.Dropdown(
+                    id={"type": "node-edit-input", "field": "node_shape", "node_id": node_id},
+                    options=[
+                        {"label": "Ellipse", "value": "ellipse"},
+                        {"label": "Rectangle", "value": "rectangle"},
+                        {"label": "Round Rectangle", "value": "round-rectangle"},
+                        {"label": "Triangle", "value": "triangle"},
+                        {"label": "Diamond", "value": "diamond"},
+                        {"label": "Pentagon", "value": "pentagon"},
+                        {"label": "Hexagon", "value": "hexagon"},
+                        {"label": "Star", "value": "star"},
+                    ],
+                    value=node_shape,
+                    clearable=False,
+                    style={"width": "100%"},
+                ),
+            ],
+            style={"marginBottom": "1rem"},
+        ),
+        html.Hr(),
+    ]
+    
+    # Add parent section
+    if parent_node:
+        parent_name = parent_node.get("label", parent_node.get("id", "Unknown"))
+        info_sections.append(
             html.Div(
                 [
-                    html.Strong("Name: "),
-                    html.Span(node_name, style={"fontSize": "1.1rem"}),
+                    html.Strong("Parent: "),
+                    html.Span(parent_name, style={"fontSize": "1rem"}),
                 ],
                 style={"marginBottom": "1rem"},
-            ),
+            )
+        )
+    else:
+        info_sections.append(
             html.Div(
                 [
-                    html.Strong("Color: "),
-                    html.Span(
-                        node_color,
-                        style={
-                            "display": "inline-block",
-                            "width": "20px",
-                            "height": "20px",
-                            "backgroundColor": node_color,
-                            "border": "1px solid #333",
-                            "marginLeft": "0.5rem",
-                            "verticalAlign": "middle",
-                        },
-                    ),
-                    html.Span(f" {node_color}", style={"marginLeft": "0.5rem"}),
+                    html.Strong("Parent: "),
+                    html.Span("None (root node)", style={"fontSize": "1rem", "fontStyle": "italic", "color": "#666"}),
                 ],
                 style={"marginBottom": "1rem"},
-            ),
-            html.Hr(),
+            )
+        )
+    
+    # Add children section
+    if children_nodes:
+        children_list = html.Ul(
+            [
+                html.Li(child.get("label", child.get("id", "Unknown")), style={"marginBottom": "0.25rem"})
+                for child in children_nodes
+            ],
+            style={"marginTop": "0.5rem", "paddingLeft": "1.5rem"},
+        )
+        info_sections.append(
             html.Div(
                 [
-                    html.Strong("Additional Details:"),
-                    html.Div(
-                        [
-                            html.Div([html.Strong(f"{label}: "), html.Span(str(data.get(key, "N/A")))])
-                            for key, label in [
-                                ("panel", "Panel"),
-                                ("primary_markers", "Markers"),
-                                ("biological_role", "Biological role"),
-                                ("id", "Full path"),
-                            ]
-                            if data.get(key)
-                        ],
-                        style={"marginTop": "0.5rem"},
-                    ),
+                    html.Strong("Children: "),
+                    children_list,
                 ],
-            ),
-        ],
-        style={"padding": "1rem"},
-    )
+            )
+        )
+    else:
+        info_sections.append(
+            html.Div(
+                [
+                    html.Strong("Children: "),
+                    html.Span("None (leaf node)", style={"fontSize": "1rem", "fontStyle": "italic", "color": "#666"}),
+                ],
+            )
+        )
+    
+    return html.Div(info_sections)
 
 
 def get_triggered_id():
@@ -132,7 +242,7 @@ def make_layout(name: str, **params):
             "randomize": False,
             "nodeOverlap": 1,
             "nodeRepulsion": params.get("nodeRepulsion", 20_000),
-            "idealEdgeLength": params.get("idealEdgeLength", 200),
+            "idealEdgeLength": params.get("idealEdgeLength", 1),
         })
     
     return base_layout
@@ -162,7 +272,8 @@ stores = [
     dcc.Store(id="all-elements", data=elements_all),
     dcc.Store(id="leaves-hidden", data=True),  # start with leaves already hidden
     dcc.Store(id="current-layout-type", data="breadthfirst"),  # track current layout type
-    dcc.Store(id="layout-params", data={"spacingFactor": 1.15, "padding": 30, "nodeRepulsion": 20000, "idealEdgeLength": 200}),
+    dcc.Store(id="layout-params", data={"spacingFactor": 1.15, "padding": 30, "nodeRepulsion": 20000, "idealEdgeLength": 1}),
+    dcc.Store(id="selected-node-id", data=None),  # track currently selected node for editing
 ]
 
 # Window styling constants
@@ -173,6 +284,34 @@ WINDOW_STYLE = {
     "backgroundColor": "#fafafa",
     "overflow": "auto",
 }
+
+# --- App Configuration ---
+# Add Inter font and global styles
+app.index_string = '''
+<!DOCTYPE html>
+<html>
+    <head>
+        {%metas%}
+        <title>{%title%}</title>
+        {%favicon%}
+        {%css%}
+        <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap">
+        <style>
+            * {
+                font-family: "Inter", -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+            }
+        </style>
+    </head>
+    <body>
+        {%app_entry%}
+        <footer>
+            {%config%}
+            {%scripts%}
+            {%renderer%}
+        </footer>
+    </body>
+</html>
+'''
 
 # --- Layout ---
 app.layout = html.Div(
@@ -216,8 +355,32 @@ app.layout = html.Div(
                 html.Div(
                     [
                         html.H4("Layout Controls", style={"marginTop": 0}),
-                        html.Div(id="layout-type-display", style={"marginBottom": "1rem"}),
-                        html.Button("Switch Layout", id="btn-toggle-layout", n_clicks=0, style={"marginBottom": "1rem"}),
+                        html.Div(
+                            [
+                                html.Button(
+                                    "Breadthfirst",
+                                    id="btn-layout-breadthfirst",
+                                    n_clicks=0,
+                                    style={
+                                        "flex": "1",
+                                        "marginRight": "0.5rem",
+                                        "padding": "0.5rem 1rem",
+                                        "fontSize": "0.9rem",
+                                    },
+                                ),
+                                html.Button(
+                                    "Cose",
+                                    id="btn-layout-cose",
+                                    n_clicks=0,
+                                    style={
+                                        "flex": "1",
+                                        "padding": "0.5rem 1rem",
+                                        "fontSize": "0.9rem",
+                                    },
+                                ),
+                            ],
+                            style={"display": "flex", "width": "100%", "marginBottom": "1rem"},
+                        ),
                         # All sliders always exist, but will be shown/hidden based on layout type
                         html.Div(
                             [
@@ -261,11 +424,11 @@ app.layout = html.Div(
                                         html.Label("Ideal Edge Length:", style={"display": "block", "marginTop": "1rem"}),
                                         dcc.Slider(
                                             id="slider-edge-length",
-                                            min=50,
+                                            min=1,
                                             max=500,
-                                            step=10,
-                                            value=200,
-                                            marks={50: "50", 250: "250", 500: "500"},
+                                            step=1,
+                                            value=1,
+                                            marks={1: "1", 250: "250", 500: "500"},
                                             tooltip={"placement": "bottom", "always_visible": True},
                                         ),
                                         html.Label("Padding:", style={"display": "block", "marginTop": "1rem"}),
@@ -295,9 +458,47 @@ app.layout = html.Div(
                 html.Div(
                     [
                         html.H4("Actions", style={"marginTop": 0}),
-                        html.Button("Toggle Leaf Nodes", id="btn-toggle-leaves", n_clicks=0, style={"marginBottom": "0.5rem", "width": "100%"}),
-                        html.Div(id="leaf-status", style={"fontSize": "0.9rem", "opacity": 0.75, "marginBottom": "1rem"}),
-                        html.Button("Export PNG", id="btn-export-png", n_clicks=0, style={"width": "100%"}),
+                        html.Div(
+                            [
+                                html.Button(
+                                    "Show all nodes",
+                                    id="btn-show-all-nodes",
+                                    n_clicks=0,
+                                    style={
+                                        "flex": "1",
+                                        "marginRight": "0.5rem",
+                                        "padding": "0.5rem 1rem",
+                                        "fontSize": "0.9rem",
+                                    },
+                                ),
+                                html.Button(
+                                    "Hide leaf nodes",
+                                    id="btn-hide-leaf-nodes",
+                                    n_clicks=0,
+                                    style={
+                                        "flex": "1",
+                                        "padding": "0.5rem 1rem",
+                                        "fontSize": "0.9rem",
+                                    },
+                                ),
+                            ],
+                            style={"display": "flex", "width": "100%", "marginBottom": "1rem"},
+                        ),
+                        html.Button(
+                            "Export PNG",
+                            id="btn-export-png",
+                            n_clicks=0,
+                            style={
+                                "width": "100%",
+                                "padding": "0.5rem 1rem",
+                                "fontSize": "0.9rem",
+                                "cursor": "pointer",
+                                "border": "1px solid #ccc",
+                                "borderRadius": "4px",
+                                "backgroundColor": "#fff",
+                                "color": "#333",
+                            },
+                        ),
                     ],
                     style={
                         **WINDOW_STYLE,
@@ -318,7 +519,14 @@ app.layout = html.Div(
             },
         ),
     ],
-    style={"margin": 0, "padding": 0, "paddingBottom": "2rem", "height": "100vh", "overflow": "auto"},
+    style={
+        "margin": 0, 
+        "padding": 0, 
+        "paddingBottom": "2rem", 
+        "height": "100vh", 
+        "overflow": "auto",
+        "fontFamily": '"Inter", -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif'
+    },
 )
 
 
@@ -326,51 +534,248 @@ app.layout = html.Div(
 @app.callback(
     Output("cyto-graph", "elements"),
     Output("leaves-hidden", "data"),
-    Output("btn-toggle-leaves", "children"),
-    Output("leaf-status", "children"),
-    Input("btn-toggle-leaves", "n_clicks"),
+    Output("btn-show-all-nodes", "style"),
+    Output("btn-hide-leaf-nodes", "style"),
+    Input("btn-show-all-nodes", "n_clicks"),
+    Input("btn-hide-leaf-nodes", "n_clicks"),
     State("leaves-hidden", "data"),
     State("all-elements", "data"),
     prevent_initial_call=False,
 )
-def toggle_leaves(n_clicks, leaves_hidden, all_elements):
+def toggle_leaves(show_all_clicks, hide_leaves_clicks, leaves_hidden, all_elements):
     # Safety on first render
     if not all_elements:
-        return [], False, "Hide leaf nodes", ""
+        base_style = {
+            "flex": "1",
+            "marginRight": "0.5rem",
+            "padding": "0.5rem 1rem",
+            "fontSize": "0.9rem",
+            "cursor": "pointer",
+            "border": "1px solid #ccc",
+            "borderRadius": "4px",
+        }
+        return [], False, base_style, {**base_style, "backgroundColor": "#e0e0e0", "color": "#666", "opacity": 0.7, "cursor": "not-allowed", "boxShadow": "inset 0 2px 4px rgba(0,0,0,0.1)"}
 
     triggered_id = get_triggered_id()
 
-    # Initial page load (no trigger): start with leaves hidden
-    if triggered_id is None:
+    # Determine which button was clicked or initial state
+    if triggered_id == "btn-show-all-nodes":
+        new_hidden = False
+    elif triggered_id == "btn-hide-leaf-nodes":
+        new_hidden = True
+    else:
+        # Initial page load (no trigger): start with leaves hidden
+        new_hidden = True
+
+    # Filter elements based on new state
+    if new_hidden:
         filtered, leaves = filter_out_leaves(all_elements, keep_root=True)
-        return (
-            filtered,  # elements
-            True,  # leaves-hidden
-            "Show all nodes",  # button label
-            f"Hidden {len(leaves)} leaf node(s) on load.",  # status
-        )
+        elements = filtered
+    else:
+        elements = all_elements
 
-    # Button clicked -> toggle
-    if triggered_id == "btn-toggle-leaves":
-        new_hidden = not bool(leaves_hidden)
-        if new_hidden:
-            filtered, leaves = filter_out_leaves(all_elements, keep_root=True)
-            return filtered, True, "Show all nodes", f"Hidden {len(leaves)} leaf node(s)."
-        else:
-            return all_elements, False, "Hide leaf nodes", "Showing all nodes."
+    # Style buttons - active button is greyed out/disabled style, inactive is normal
+    base_button_style = {
+        "flex": "1",
+        "marginRight": "0.5rem",
+        "padding": "0.5rem 1rem",
+        "fontSize": "0.9rem",
+        "cursor": "pointer",
+        "border": "1px solid #ccc",
+        "borderRadius": "4px",
+    }
+    
+    # First button always has marginRight, second button never does
+    show_all_base = {**base_button_style}
+    hide_leaves_base = {**base_button_style.copy()}
+    hide_leaves_base.pop("marginRight", None)
 
-    # Default: unchanged if another control triggered this callback
-    return all_elements, bool(leaves_hidden), (
-        "Show all nodes" if leaves_hidden else "Hide leaf nodes"
-    ), ""
+    if new_hidden:
+        # Hide leaf nodes is active
+        show_all_style = {
+            **show_all_base,
+            "backgroundColor": "#fff",
+            "color": "#333",
+        }
+        hide_leaves_style = {
+            **hide_leaves_base,
+            "backgroundColor": "#e0e0e0",
+            "color": "#666",
+            "opacity": 0.7,
+            "cursor": "not-allowed",
+            "boxShadow": "inset 0 2px 4px rgba(0,0,0,0.1)",
+        }
+    else:
+        # Show all nodes is active
+        show_all_style = {
+            **show_all_base,
+            "backgroundColor": "#e0e0e0",
+            "color": "#666",
+            "opacity": 0.7,
+            "cursor": "not-allowed",
+            "boxShadow": "inset 0 2px 4px rgba(0,0,0,0.1)",
+        }
+        hide_leaves_style = {
+            **hide_leaves_base,
+            "backgroundColor": "#fff",
+            "color": "#333",
+        }
+
+    return elements, new_hidden, show_all_style, hide_leaves_style
 
 
 @app.callback(
     Output("node-info-panel", "children"),
+    Output("selected-node-id", "data"),
     Input("cyto-graph", "tapNodeData"),
+    State("all-elements", "data"),
 )
-def update_node_info_panel(tap_node_data):
-    return show_node_info(tap_node_data)
+def update_node_info_panel(tap_node_data, all_elements):
+    node_id = tap_node_data.get("id") if tap_node_data else None
+    return show_node_info(tap_node_data, all_elements), node_id
+
+
+@app.callback(
+    Output("cyto-graph", "elements", allow_duplicate=True),
+    Output("all-elements", "data", allow_duplicate=True),
+    Output({"type": "node-color-preview", "node_id": ALL}, "style", allow_duplicate=True),
+    Input({"type": "node-edit-input", "field": "label", "node_id": ALL}, "value"),
+    Input({"type": "node-edit-input", "field": "node_colour", "node_id": ALL}, "value"),
+    Input({"type": "node-edit-input", "field": "node_shape", "node_id": ALL}, "value"),
+    State("all-elements", "data"),
+    State("cyto-graph", "elements"),
+    State("selected-node-id", "data"),
+    prevent_initial_call=True,
+)
+def update_node_properties(label_values, color_values, shape_values, all_elements, current_elements, selected_node_id):
+    """
+    Update node properties (name, color, shape) when edited in the node info panel.
+    """
+    if not all_elements or not current_elements or not selected_node_id:
+        return no_update, no_update, []
+    
+    triggered = callback_context.triggered[0] if callback_context.triggered else None
+    if not triggered:
+        return no_update, no_update, []
+    
+    # Parse the triggered prop_id to get which field was changed
+    prop_id = triggered["prop_id"]
+    if "node-edit-input" not in prop_id:
+        return no_update, no_update, []
+    
+    # Extract field from the prop_id
+    import json
+    try:
+        json_part = prop_id.split(".value")[0]
+        input_info = json.loads(json_part)
+        field = input_info.get("field")
+        node_id = input_info.get("node_id")
+    except:
+        return no_update, no_update, []
+    
+    # Get current node color for preview
+    current_node_color = "#A0C4FF"  # default
+    for el in all_elements:
+        if "source" not in el.get("data", {}) and el["data"].get("id") == selected_node_id:
+            current_node_color = el["data"].get("node_colour", "#A0C4FF")
+            break
+    
+    # Use selected_node_id to find the correct value
+    # Since we're using ALL, we need to find which input corresponds to selected_node_id
+    # For simplicity, if there's only one input (the selected node), use the first value
+    new_value = None
+    color_preview_style = None
+    
+    if field == "label" and label_values:
+        # Find the value for the selected node
+        for i, val in enumerate(label_values):
+            if val is not None:
+                new_value = val
+                break
+    elif field == "node_colour" and color_values:
+        for i, val in enumerate(color_values):
+            if val is not None:
+                new_value = val
+                # Update color preview
+                color_preview_style = {
+                    "width": "50px",
+                    "height": "40px",
+                    "backgroundColor": val,
+                    "border": "1px solid #333",
+                    "borderRadius": "4px",
+                    "marginRight": "0.5rem",
+                    "flexShrink": 0,
+                }
+                break
+    elif field == "node_shape" and shape_values:
+        for i, val in enumerate(shape_values):
+            if val is not None:
+                new_value = val
+                break
+    
+    if new_value is None:
+        # Return current color preview style even if no update
+        default_preview_style = {
+            "width": "50px",
+            "height": "40px",
+            "backgroundColor": current_node_color,
+            "border": "1px solid #333",
+            "borderRadius": "4px",
+            "marginRight": "0.5rem",
+            "flexShrink": 0,
+        }
+        return no_update, no_update, [default_preview_style]
+    
+    # Use selected_node_id (from Store) as the node to update
+    node_id = selected_node_id
+    
+    # Update all_elements
+    updated_all = []
+    for el in all_elements:
+        el_copy = el.copy()
+        if "source" not in el.get("data", {}):  # It's a node
+            if el["data"].get("id") == node_id:
+                el_copy["data"] = el["data"].copy()
+                if field == "label":
+                    el_copy["data"]["label"] = new_value
+                elif field == "node_colour":
+                    el_copy["data"]["node_colour"] = new_value
+                elif field == "node_shape":
+                    el_copy["data"]["node_shape"] = new_value
+        updated_all.append(el_copy)
+    
+    # Update current_elements (visible elements)
+    updated_current = []
+    for el in current_elements:
+        el_copy = el.copy()
+        if "source" not in el.get("data", {}):  # It's a node
+            if el["data"].get("id") == node_id:
+                el_copy["data"] = el["data"].copy()
+                if field == "label":
+                    el_copy["data"]["label"] = new_value
+                elif field == "node_colour":
+                    el_copy["data"]["node_colour"] = new_value
+                elif field == "node_shape":
+                    el_copy["data"]["node_shape"] = new_value
+        updated_current.append(el_copy)
+    
+    # Always return color preview style (updated if color changed, current otherwise)
+    if color_preview_style:
+        preview_style = color_preview_style
+    else:
+        # Use the new color if it was set, otherwise use current
+        preview_color = new_value if field == "node_colour" else current_node_color
+        preview_style = {
+            "width": "50px",
+            "height": "40px",
+            "backgroundColor": preview_color,
+            "border": "1px solid #333",
+            "borderRadius": "4px",
+            "marginRight": "0.5rem",
+            "flexShrink": 0,
+        }
+    
+    return updated_current, updated_all, [preview_style]
 
 
 @app.callback(
@@ -394,42 +799,81 @@ def export_current_view(n_clicks):
 @app.callback(
     Output("cyto-graph", "layout"),
     Output("current-layout-type", "data"),
-    Output("layout-type-display", "children"),
+    Output("btn-layout-breadthfirst", "style"),
+    Output("btn-layout-cose", "style"),
     Output("breadthfirst-controls", "style"),
     Output("cose-controls", "style"),
-    Input("btn-toggle-layout", "n_clicks"),
+    Input("btn-layout-breadthfirst", "n_clicks"),
+    Input("btn-layout-cose", "n_clicks"),
     Input("layout-params", "data"),
     State("current-layout-type", "data"),
     prevent_initial_call=False,
 )
-def update_layout(n_clicks, layout_params, current_layout_type):
+def update_layout(bf_clicks, cose_clicks, layout_params, current_layout_type):
     """
     Update layout type and parameters, and show/hide appropriate controls.
+    Style buttons to show which is active.
     """
     triggered_id = get_triggered_id()
     
-    # Determine layout type
-    if triggered_id == "btn-toggle-layout" and n_clicks:
-        # Toggle layout type
-        new_layout_type = "cose" if current_layout_type == "breadthfirst" else "breadthfirst"
+    # Determine layout type based on which button was clicked
+    if triggered_id == "btn-layout-breadthfirst":
+        new_layout_type = "breadthfirst"
+    elif triggered_id == "btn-layout-cose":
+        new_layout_type = "cose"
     else:
         # Use current layout type (initial load or parameter update)
         new_layout_type = current_layout_type or "breadthfirst"
     
     # Ensure layout_params is not None
     if layout_params is None:
-        layout_params = {"spacingFactor": 1.15, "padding": 30, "nodeRepulsion": 20000, "idealEdgeLength": 200}
+        layout_params = {"spacingFactor": 1.15, "padding": 30, "nodeRepulsion": 20000, "idealEdgeLength": 1}
     
     # Create layout with current parameters
     layout = make_layout(new_layout_type, **layout_params)
     
-    # Create layout type display
-    layout_display = html.Div(
-        [
-            html.Strong("Current Layout: "),
-            html.Span(new_layout_type.upper(), style={"fontSize": "1.1rem", "fontWeight": "bold"}),
-        ],
-    )
+    # Style buttons - active button is greyed out/disabled style, inactive is normal
+    base_button_style = {
+        "flex": "1",
+        "padding": "0.5rem 1rem",
+        "fontSize": "0.9rem",
+        "cursor": "pointer",
+        "border": "1px solid #ccc",
+        "borderRadius": "4px",
+    }
+    
+    # First button always has marginRight, second button never does
+    bf_base = {**base_button_style, "marginRight": "0.5rem"}
+    cose_base = {**base_button_style.copy()}
+    
+    if new_layout_type == "breadthfirst":
+        bf_button_style = {
+            **bf_base,
+            "backgroundColor": "#e0e0e0",
+            "color": "#666",
+            "opacity": 0.7,
+            "cursor": "not-allowed",
+            "boxShadow": "inset 0 2px 4px rgba(0,0,0,0.1)",
+        }
+        cose_button_style = {
+            **cose_base,
+            "backgroundColor": "#fff",
+            "color": "#333",
+        }
+    else:  # cose
+        bf_button_style = {
+            **bf_base,
+            "backgroundColor": "#fff",
+            "color": "#333",
+        }
+        cose_button_style = {
+            **cose_base,
+            "backgroundColor": "#e0e0e0",
+            "color": "#666",
+            "opacity": 0.7,
+            "cursor": "not-allowed",
+            "boxShadow": "inset 0 2px 4px rgba(0,0,0,0.1)",
+        }
     
     # Show/hide controls based on layout type
     if new_layout_type == "breadthfirst":
@@ -439,7 +883,7 @@ def update_layout(n_clicks, layout_params, current_layout_type):
         bf_style = {"display": "none"}
         cose_style = {"display": "block"}
     
-    return layout, new_layout_type, layout_display, bf_style, cose_style
+    return layout, new_layout_type, bf_button_style, cose_button_style, bf_style, cose_style
 
 
 @app.callback(
@@ -478,31 +922,6 @@ def update_layout_params(spacing_factor, padding_bf, node_repulsion, edge_length
         updated_params["padding"] = padding_cose
     
     return updated_params
-
-
-@app.callback(
-    Output("slider-spacing-factor", "value"),
-    Output("slider-padding-bf", "value"),
-    Output("slider-node-repulsion", "value"),
-    Output("slider-edge-length", "value"),
-    Output("slider-padding-cose", "value"),
-    Input("layout-params", "data"),
-    prevent_initial_call=True,
-)
-def update_slider_values(layout_params):
-    """
-    Update slider values when layout parameters change (e.g., when switching layouts).
-    """
-    if not layout_params:
-        layout_params = {"spacingFactor": 1.15, "padding": 30, "nodeRepulsion": 20000, "idealEdgeLength": 200}
-    
-    return (
-        layout_params.get("spacingFactor", 1.15),
-        layout_params.get("padding", 30),
-        layout_params.get("nodeRepulsion", 20000),
-        layout_params.get("idealEdgeLength", 200),
-        layout_params.get("padding", 50),
-    )
 
 
 # --- Main ---

@@ -17,6 +17,9 @@ def cyto_stylesheet():
         # If node_colour is set in data, prefer it
         {"selector": "node[ node_colour ]",
          "style": { "background-color": "data(node_colour)" }},
+        # If node_shape is set in data, use it
+        {"selector": "node[ node_shape ]",
+         "style": { "shape": "data(node_shape)" }},
 
         # Panel-specific class example
         {"selector": ".panel-Tv2",
