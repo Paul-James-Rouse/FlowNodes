@@ -33,6 +33,194 @@ def filter_out_leaves(all_elements, keep_root=True):
     return kept_nodes + kept_edges, sorted(leaves)
 
 
+def get_color_palette():
+    """
+    Generate a color palette for the color picker.
+    Returns a list of hex color codes organized in rows.
+    """
+    # Common colors for scientific visualization
+    return [
+        "#FF6B6B", "#4ECDC4", "#45B7D1", "#FFA07A", "#98D8C8", "#F7DC6F", "#BB8FCE", "#85C1E2",
+        "#E74C3C", "#1ABC9C", "#3498DB", "#E67E22", "#27AE60", "#F39C12", "#9B59B6", "#16A085",
+        "#C0392B", "#138D75", "#2874A6", "#D35400", "#229954", "#D68910", "#7D3C98", "#117A65",
+        "#A93226", "#0E6655", "#1F618D", "#BA4A00", "#1E8449", "#B9770E", "#633974", "#0B5345",
+        "#922B21", "#0B5345", "#154360", "#A04000", "#186A3B", "#9C640C", "#512E5F", "#0A3D2E",
+        "#7B241C", "#0A3D2E", "#0C4A6E", "#873600", "#145A32", "#7E5109", "#3E2723", "#08302A",
+        "#641E16", "#08302A", "#0A2E4A", "#6E2C00", "#0F5132", "#5E3F08", "#2C1810", "#062520",
+        "#A0C4FF", "#B19CD9", "#FFB3BA", "#BAFFC9", "#FFFFBA", "#FFDFBA", "#BAE1FF", "#F0F0F0",
+    ]
+
+
+def create_color_picker_modal():
+    """
+    Create the color picker modal component.
+    """
+    colors = get_color_palette()
+    
+    # Create color swatches
+    color_swatches = []
+    for i, color in enumerate(colors):
+        color_swatches.append(
+            html.Button(
+                "",
+                id={"type": "color-swatch", "index": i},
+                n_clicks=0,
+                style={
+                    "width": "40px",
+                    "height": "40px",
+                    "backgroundColor": color,
+                    "border": "2px solid #ddd",
+                    "borderRadius": "4px",
+                    "cursor": "pointer",
+                    "margin": "2px",
+                    "transition": "all 0.2s",
+                    "padding": 0,
+                },
+                title=color,
+            )
+        )
+    
+    return html.Div(
+        id="color-picker-modal-overlay",
+        style={
+            "display": "none",  # Controlled by callback
+            "position": "fixed",
+            "top": 0,
+            "left": 0,
+            "width": "100%",
+            "height": "100%",
+            "backgroundColor": "rgba(0, 0, 0, 0.5)",
+            "zIndex": 1000,
+            "justifyContent": "center",
+            "alignItems": "center",
+        },
+        children=[
+            html.Div(
+                id="color-picker-modal-content",
+                style={
+                    "backgroundColor": "#fff",
+                    "borderRadius": "8px",
+                    "padding": "2rem",
+                    "maxWidth": "500px",
+                    "width": "90%",
+                    "boxShadow": "0 4px 6px rgba(0, 0, 0, 0.1)",
+                    "position": "relative",
+                },
+                children=[
+                    html.Div(
+                        [
+                            html.H3("Pick a Color", style={"margin": 0, "marginBottom": "1rem"}),
+                            html.Button(
+                                "×",
+                                id="btn-close-color-picker",
+                                n_clicks=0,
+                                style={
+                                    "position": "absolute",
+                                    "top": "1rem",
+                                    "right": "1rem",
+                                    "background": "none",
+                                    "border": "none",
+                                    "fontSize": "2rem",
+                                    "cursor": "pointer",
+                                    "color": "#666",
+                                    "lineHeight": "1",
+                                    "padding": "0",
+                                    "width": "30px",
+                                    "height": "30px",
+                                },
+                            ),
+                        ],
+                        style={"position": "relative", "marginBottom": "1.5rem"},
+                    ),
+                    html.Div(
+                        [
+                            html.Label("Color Palette:", style={"display": "block", "marginBottom": "0.5rem", "fontWeight": "bold"}),
+                            html.Div(
+                                color_swatches,
+                                style={
+                                    "display": "grid",
+                                    "gridTemplateColumns": "repeat(8, 1fr)",
+                                    "gap": "4px",
+                                    "marginBottom": "1.5rem",
+                                    "maxHeight": "300px",
+                                    "overflowY": "auto",
+                                },
+                            ),
+                        ],
+                    ),
+                    html.Div(
+                        [
+                            html.Label("Custom Hex:", style={"display": "block", "marginBottom": "0.5rem", "fontWeight": "bold"}),
+                            html.Div(
+                                [
+                                    html.Div(
+                                        id="color-picker-preview",
+                                        style={
+                                            "width": "60px",
+                                            "height": "50px",
+                                            "backgroundColor": "#A0C4FF",
+                                            "border": "2px solid #333",
+                                            "borderRadius": "4px",
+                                            "marginRight": "0.5rem",
+                                            "flexShrink": 0,
+                                        },
+                                    ),
+                                    dcc.Input(
+                                        id="color-picker-hex-input",
+                                        type="text",
+                                        placeholder="#A0C4FF",
+                                        style={
+                                            "flex": "1",
+                                            "padding": "0.5rem",
+                                            "fontSize": "0.9rem",
+                                            "fontFamily": "monospace",
+                                            "border": "1px solid #ccc",
+                                            "borderRadius": "4px",
+                                        },
+                                    ),
+                                ],
+                                style={"display": "flex", "alignItems": "center", "marginBottom": "1.5rem"},
+                            ),
+                        ],
+                    ),
+                    html.Div(
+                        [
+                            html.Button(
+                                "Cancel",
+                                id="btn-cancel-color-picker",
+                                n_clicks=0,
+                                style={
+                                    "padding": "0.5rem 1.5rem",
+                                    "marginRight": "0.5rem",
+                                    "cursor": "pointer",
+                                    "border": "1px solid #ccc",
+                                    "borderRadius": "4px",
+                                    "backgroundColor": "#f5f5f5",
+                                    "color": "#333",
+                                },
+                            ),
+                            html.Button(
+                                "Apply",
+                                id="btn-apply-color-picker",
+                                n_clicks=0,
+                                style={
+                                    "padding": "0.5rem 1.5rem",
+                                    "cursor": "pointer",
+                                    "border": "1px solid #4CAF50",
+                                    "borderRadius": "4px",
+                                    "backgroundColor": "#4CAF50",
+                                    "color": "#fff",
+                                },
+                            ),
+                        ],
+                        style={"display": "flex", "justifyContent": "flex-end"},
+                    ),
+                ],
+            ),
+        ],
+    )
+
+
 def show_node_info(data, all_elements=None):
     """
     Display node information with name, color, parent, and children.
@@ -98,36 +286,21 @@ def show_node_info(data, all_elements=None):
         html.Div(
             [
                 html.Label("Color:", style={"display": "block", "marginBottom": "0.25rem", "fontWeight": "bold"}),
-                html.Div(
-                    [
-                        html.Div(
-                            id={"type": "node-color-preview", "node_id": node_id},
-                            style={
-                                "width": "50px",
-                                "height": "40px",
-                                "backgroundColor": node_color,
-                                "border": "1px solid #333",
-                                "borderRadius": "4px",
-                                "marginRight": "0.5rem",
-                                "flexShrink": 0,
-                            },
-                        ),
-                        dcc.Input(
-                            id={"type": "node-edit-input", "field": "node_colour", "node_id": node_id},
-                            type="text",
-                            value=node_color,
-                            placeholder="#A0C4FF",
-                            style={
-                                "flex": "1",
-                                "padding": "0.5rem",
-                                "fontSize": "0.9rem",
-                                "fontFamily": "monospace",
-                                "border": "1px solid #ccc",
-                                "borderRadius": "4px",
-                            },
-                        ),
-                    ],
-                    style={"display": "flex", "alignItems": "center"},
+                html.Button(
+                    "",
+                    id={"type": "btn-open-color-picker", "node_id": node_id},
+                    n_clicks=0,
+                    style={
+                        "width": "50px",
+                        "height": "40px",
+                        "backgroundColor": node_color,
+                        "border": "1px solid #333",
+                        "borderRadius": "4px",
+                        "cursor": "pointer",
+                        "padding": 0,
+                        "transition": "all 0.2s",
+                    },
+                    title="Click to pick a color",
                 ),
             ],
             style={"marginBottom": "1rem"},
@@ -234,11 +407,11 @@ def make_layout(name: str, **params):
     if name == "breadthfirst":
         base_layout.update({
             "spacingFactor": params.get("spacingFactor", 1.15),
-            "padding": params.get("padding", 30),
+            "padding": params.get("padding", 75),
         })
     else:  # cose
         base_layout.update({
-            "padding": params.get("padding", 50),
+            "padding": params.get("padding", 75),
             "randomize": False,
             "nodeOverlap": 1,
             "nodeRepulsion": params.get("nodeRepulsion", 20_000),
@@ -272,8 +445,10 @@ stores = [
     dcc.Store(id="all-elements", data=elements_all),
     dcc.Store(id="leaves-hidden", data=True),  # start with leaves already hidden
     dcc.Store(id="current-layout-type", data="breadthfirst"),  # track current layout type
-    dcc.Store(id="layout-params", data={"spacingFactor": 1.15, "padding": 30, "nodeRepulsion": 20000, "idealEdgeLength": 1}),
+    dcc.Store(id="layout-params", data={"spacingFactor": 1.15, "padding": 75, "nodeRepulsion": 20000, "idealEdgeLength": 1}),
     dcc.Store(id="selected-node-id", data=None),  # track currently selected node for editing
+    dcc.Store(id="color-picker-modal-open", data=False),  # track if color picker modal is open
+    dcc.Store(id="color-picker-selected", data=None),  # temporarily store selected color before applying
 ]
 
 # Window styling constants
@@ -299,6 +474,19 @@ app.index_string = '''
         <style>
             * {
                 font-family: "Inter", -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+            }
+            /* Color picker swatch hover effects */
+            [id*="color-swatch"]:hover {
+                transform: scale(1.1);
+                border-color: #333 !important;
+                box-shadow: 0 2px 8px rgba(0, 0, 0, 0.3);
+                z-index: 10;
+                position: relative;
+            }
+            /* Color preview button hover effect */
+            [id*="btn-open-color-picker"]:hover {
+                transform: scale(1.05);
+                box-shadow: 0 2px 6px rgba(0, 0, 0, 0.2);
             }
         </style>
     </head>
@@ -328,7 +516,7 @@ app.layout = html.Div(
                             elements=elements,
                             layout=make_layout("breadthfirst"),
                             stylesheet=cyto_stylesheet(),
-                            style={"height": "calc(70vh - 80px)", "width": "100%"},
+                            style={"height": "calc(70vh - 80px)", "width": "100%", "backgroundColor": "#ffffff"},
                             minZoom=0.2,
                             maxZoom=2.5,
                             boxSelectionEnabled=True,
@@ -338,6 +526,7 @@ app.layout = html.Div(
                         **WINDOW_STYLE,
                         "gridColumn": "1",
                         "gridRow": "1",
+                        "backgroundColor": "#ffffff",
                     },
                 ),
                 # Top Right: Node Information
@@ -402,7 +591,7 @@ app.layout = html.Div(
                                             min=0,
                                             max=100,
                                             step=5,
-                                            value=30,
+                                            value=75,
                                             marks={0: "0", 50: "50", 100: "100"},
                                             tooltip={"placement": "bottom", "always_visible": True},
                                         ),
@@ -437,7 +626,7 @@ app.layout = html.Div(
                                             min=0,
                                             max=100,
                                             step=5,
-                                            value=50,
+                                            value=75,
                                             marks={0: "0", 50: "50", 100: "100"},
                                             tooltip={"placement": "bottom", "always_visible": True},
                                         ),
@@ -518,6 +707,7 @@ app.layout = html.Div(
                 "boxSizing": "border-box",
             },
         ),
+        create_color_picker_modal(),
     ],
     style={
         "margin": 0, 
@@ -638,16 +828,14 @@ def update_node_info_panel(tap_node_data, all_elements):
 @app.callback(
     Output("cyto-graph", "elements", allow_duplicate=True),
     Output("all-elements", "data", allow_duplicate=True),
-    Output({"type": "node-color-preview", "node_id": ALL}, "style", allow_duplicate=True),
     Input({"type": "node-edit-input", "field": "label", "node_id": ALL}, "value"),
-    Input({"type": "node-edit-input", "field": "node_colour", "node_id": ALL}, "value"),
     Input({"type": "node-edit-input", "field": "node_shape", "node_id": ALL}, "value"),
     State("all-elements", "data"),
     State("cyto-graph", "elements"),
     State("selected-node-id", "data"),
     prevent_initial_call=True,
 )
-def update_node_properties(label_values, color_values, shape_values, all_elements, current_elements, selected_node_id):
+def update_node_properties(label_values, shape_values, all_elements, current_elements, selected_node_id):
     """
     Update node properties (name, color, shape) when edited in the node info panel.
     """
@@ -671,41 +859,18 @@ def update_node_properties(label_values, color_values, shape_values, all_element
         field = input_info.get("field")
         node_id = input_info.get("node_id")
     except:
-        return no_update, no_update, []
-    
-    # Get current node color for preview
-    current_node_color = "#A0C4FF"  # default
-    for el in all_elements:
-        if "source" not in el.get("data", {}) and el["data"].get("id") == selected_node_id:
-            current_node_color = el["data"].get("node_colour", "#A0C4FF")
-            break
+        return no_update, no_update
     
     # Use selected_node_id to find the correct value
     # Since we're using ALL, we need to find which input corresponds to selected_node_id
     # For simplicity, if there's only one input (the selected node), use the first value
     new_value = None
-    color_preview_style = None
     
     if field == "label" and label_values:
         # Find the value for the selected node
         for i, val in enumerate(label_values):
             if val is not None:
                 new_value = val
-                break
-    elif field == "node_colour" and color_values:
-        for i, val in enumerate(color_values):
-            if val is not None:
-                new_value = val
-                # Update color preview
-                color_preview_style = {
-                    "width": "50px",
-                    "height": "40px",
-                    "backgroundColor": val,
-                    "border": "1px solid #333",
-                    "borderRadius": "4px",
-                    "marginRight": "0.5rem",
-                    "flexShrink": 0,
-                }
                 break
     elif field == "node_shape" and shape_values:
         for i, val in enumerate(shape_values):
@@ -714,17 +879,7 @@ def update_node_properties(label_values, color_values, shape_values, all_element
                 break
     
     if new_value is None:
-        # Return current color preview style even if no update
-        default_preview_style = {
-            "width": "50px",
-            "height": "40px",
-            "backgroundColor": current_node_color,
-            "border": "1px solid #333",
-            "borderRadius": "4px",
-            "marginRight": "0.5rem",
-            "flexShrink": 0,
-        }
-        return no_update, no_update, [default_preview_style]
+        return no_update, no_update
     
     # Use selected_node_id (from Store) as the node to update
     node_id = selected_node_id
@@ -759,23 +914,7 @@ def update_node_properties(label_values, color_values, shape_values, all_element
                     el_copy["data"]["node_shape"] = new_value
         updated_current.append(el_copy)
     
-    # Always return color preview style (updated if color changed, current otherwise)
-    if color_preview_style:
-        preview_style = color_preview_style
-    else:
-        # Use the new color if it was set, otherwise use current
-        preview_color = new_value if field == "node_colour" else current_node_color
-        preview_style = {
-            "width": "50px",
-            "height": "40px",
-            "backgroundColor": preview_color,
-            "border": "1px solid #333",
-            "borderRadius": "4px",
-            "marginRight": "0.5rem",
-            "flexShrink": 0,
-        }
-    
-    return updated_current, updated_all, [preview_style]
+    return updated_current, updated_all
 
 
 @app.callback(
@@ -827,7 +966,7 @@ def update_layout(bf_clicks, cose_clicks, layout_params, current_layout_type):
     
     # Ensure layout_params is not None
     if layout_params is None:
-        layout_params = {"spacingFactor": 1.15, "padding": 30, "nodeRepulsion": 20000, "idealEdgeLength": 1}
+        layout_params = {"spacingFactor": 1.15, "padding": 75, "nodeRepulsion": 20000, "idealEdgeLength": 1}
     
     # Create layout with current parameters
     layout = make_layout(new_layout_type, **layout_params)
@@ -902,7 +1041,7 @@ def update_layout_params(spacing_factor, padding_bf, node_repulsion, edge_length
     Update layout parameters when sliders change.
     """
     if not current_params:
-        current_params = {"spacingFactor": 1.15, "padding": 30, "nodeRepulsion": 20000, "idealEdgeLength": 200}
+        current_params = {"spacingFactor": 1.15, "padding": 75, "nodeRepulsion": 20000, "idealEdgeLength": 200}
     
     # Create a copy to avoid mutating the state
     updated_params = current_params.copy()
@@ -922,6 +1061,228 @@ def update_layout_params(spacing_factor, padding_bf, node_repulsion, edge_length
         updated_params["padding"] = padding_cose
     
     return updated_params
+
+
+# --- Color Picker Modal Callbacks ---
+
+@app.callback(
+    Output("color-picker-modal-open", "data"),
+    Output("color-picker-selected", "data"),
+    Output("color-picker-modal-overlay", "style"),
+    Output("color-picker-preview", "style"),
+    Output("color-picker-hex-input", "value"),
+    Input({"type": "btn-open-color-picker", "node_id": ALL}, "n_clicks"),
+    Input("btn-close-color-picker", "n_clicks"),
+    Input("btn-cancel-color-picker", "n_clicks"),
+    Input({"type": "color-swatch", "index": ALL}, "n_clicks"),
+    Input("color-picker-hex-input", "value"),
+    State("color-picker-modal-open", "data"),
+    State("color-picker-selected", "data"),
+    State("selected-node-id", "data"),
+    State("all-elements", "data"),
+    prevent_initial_call=True,
+)
+def handle_color_picker_modal(
+    open_btn_clicks, close_btn_clicks, cancel_btn_clicks, swatch_clicks, hex_input,
+    modal_open, selected_color, selected_node_id, all_elements
+):
+    """
+    Handle opening/closing the color picker modal and color selection.
+    """
+    ctx = callback_context
+    if not ctx.triggered:
+        return no_update, no_update, no_update, no_update, no_update
+    
+    triggered_id = get_triggered_id()
+    
+    # Get current node color for initial preview
+    current_node_color = "#A0C4FF"
+    if selected_node_id and all_elements:
+        for el in all_elements:
+            if "source" not in el.get("data", {}) and el["data"].get("id") == selected_node_id:
+                current_node_color = el["data"].get("node_colour", "#A0C4FF")
+                break
+    
+    # Handle opening modal
+    if "btn-open-color-picker" in triggered_id:
+        # Only open if there's an actual click (n_clicks > 0)
+        if open_btn_clicks and any(x and x > 0 for x in open_btn_clicks):
+            modal_style = {
+                "display": "flex",
+                "position": "fixed",
+                "top": 0,
+                "left": 0,
+                "width": "100%",
+                "height": "100%",
+                "backgroundColor": "rgba(0, 0, 0, 0.5)",
+                "zIndex": 1000,
+                "justifyContent": "center",
+                "alignItems": "center",
+            }
+            preview_style = {
+                "width": "60px",
+                "height": "50px",
+                "backgroundColor": current_node_color,
+                "border": "2px solid #333",
+                "borderRadius": "4px",
+                "marginRight": "0.5rem",
+                "flexShrink": 0,
+            }
+            return True, current_node_color, modal_style, preview_style, current_node_color
+        else:
+            return no_update, no_update, no_update, no_update, no_update
+    
+    # Handle closing modal (close or cancel buttons)
+    if triggered_id in ["btn-close-color-picker", "btn-cancel-color-picker"]:
+        modal_style = {
+            "display": "none",
+            "position": "fixed",
+            "top": 0,
+            "left": 0,
+            "width": "100%",
+            "height": "100%",
+            "backgroundColor": "rgba(0, 0, 0, 0.5)",
+            "zIndex": 1000,
+            "justifyContent": "center",
+            "alignItems": "center",
+        }
+        return False, None, modal_style, no_update, no_update
+    
+    # Handle color swatch selection
+    if "color-swatch" in triggered_id:
+        colors = get_color_palette()
+        try:
+            import json
+            json_part = triggered_id.split(".n_clicks")[0]
+            swatch_info = json.loads(json_part)
+            index = swatch_info.get("index")
+            if index is not None and 0 <= index < len(colors):
+                selected_color = colors[index]
+                preview_style = {
+                    "width": "60px",
+                    "height": "50px",
+                    "backgroundColor": selected_color,
+                    "border": "2px solid #333",
+                    "borderRadius": "4px",
+                    "marginRight": "0.5rem",
+                    "flexShrink": 0,
+                }
+                return no_update, selected_color, no_update, preview_style, selected_color
+        except:
+            pass
+    
+    # Handle hex input change
+    if triggered_id == "color-picker-hex-input":
+        if hex_input:
+            hex_input = hex_input.strip()
+            if hex_input.startswith("#") and len(hex_input) == 7:  # Valid hex color
+                preview_style = {
+                    "width": "60px",
+                    "height": "50px",
+                    "backgroundColor": hex_input,
+                    "border": "2px solid #333",
+                    "borderRadius": "4px",
+                    "marginRight": "0.5rem",
+                    "flexShrink": 0,
+                }
+                return no_update, hex_input, no_update, preview_style, hex_input
+        # Even if invalid, allow typing (don't block input)
+        return no_update, no_update, no_update, no_update, hex_input
+    
+    return no_update, no_update, no_update, no_update, no_update
+
+
+@app.callback(
+    Output("cyto-graph", "elements", allow_duplicate=True),
+    Output("all-elements", "data", allow_duplicate=True),
+    Output("color-picker-modal-open", "data", allow_duplicate=True),
+    Output("color-picker-modal-overlay", "style", allow_duplicate=True),
+    Output({"type": "btn-open-color-picker", "node_id": ALL}, "style", allow_duplicate=True),
+    Input("btn-apply-color-picker", "n_clicks"),
+    State("color-picker-selected", "data"),
+    State("selected-node-id", "data"),
+    State("all-elements", "data"),
+    State("cyto-graph", "elements"),
+    State({"type": "btn-open-color-picker", "node_id": ALL}, "style"),
+    prevent_initial_call=True,
+)
+def apply_color_from_picker(
+    apply_clicks, selected_color, selected_node_id, all_elements, current_elements, current_button_styles
+):
+    """
+    Apply the selected color from the color picker to the node.
+    """
+    if not apply_clicks or not selected_color or not selected_node_id:
+        return no_update, no_update, no_update, no_update, no_update
+    
+    # Update all_elements
+    updated_all = []
+    for el in all_elements:
+        el_copy = el.copy()
+        if "source" not in el.get("data", {}):  # It's a node
+            if el["data"].get("id") == selected_node_id:
+                el_copy["data"] = el["data"].copy()
+                el_copy["data"]["node_colour"] = selected_color
+        updated_all.append(el_copy)
+    
+    # Update current_elements
+    updated_current = []
+    for el in current_elements:
+        el_copy = el.copy()
+        if "source" not in el.get("data", {}):  # It's a node
+            if el["data"].get("id") == selected_node_id:
+                el_copy["data"] = el["data"].copy()
+                el_copy["data"]["node_colour"] = selected_color
+        updated_current.append(el_copy)
+    
+    # Close modal
+    modal_style = {
+        "display": "none",
+        "position": "fixed",
+        "top": 0,
+        "left": 0,
+        "width": "100%",
+        "height": "100%",
+        "backgroundColor": "rgba(0, 0, 0, 0.5)",
+        "zIndex": 1000,
+        "justifyContent": "center",
+        "alignItems": "center",
+    }
+    
+    # Update color preview button style
+    # Since only one node is selected at a time, we need to update the button style
+    # The button ID is {"type": "btn-open-color-picker", "node_id": selected_node_id}
+    # With ALL pattern, we need to return a list matching all buttons
+    # We'll update all buttons, but only the one for the selected node will be visible
+    
+    color_preview_style = {
+        "width": "50px",
+        "height": "40px",
+        "backgroundColor": selected_color,
+        "border": "1px solid #333",
+        "borderRadius": "4px",
+        "cursor": "pointer",
+        "padding": 0,
+        "transition": "all 0.2s",
+    }
+    
+    # Return updated styles - since we're using ALL, we need to return a list
+    # We'll preserve existing styles for other buttons and update the matching one
+    if current_button_styles:
+        updated_styles = []
+        for style in current_button_styles:
+            if style and isinstance(style, dict):
+                # Update the style, preserving other properties
+                updated_style = style.copy()
+                updated_style["backgroundColor"] = selected_color
+                updated_styles.append(updated_style)
+            else:
+                updated_styles.append(color_preview_style)
+    else:
+        # If no current styles, return the new style
+        updated_styles = [color_preview_style]
+    
+    return updated_current, updated_all, False, modal_style, updated_styles
 
 
 # --- Main ---
