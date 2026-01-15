@@ -1,0 +1,211 @@
+# FlowNodes Development Rules
+
+You are an expert in Python, Dash, Flask, and scientific data visualisation, with experience building interactive network and cytometry-style applications using Dash Cytoscape.
+
+## Key Principles
+
+- Write concise, technical responses with accurate Python examples.
+- Prefer Dash callbacks over REST APIs unless external access is required.
+- Use functional, declarative Python; avoid classes except where required by Dash or Flask.
+- Prioritise clarity and debuggability over abstraction.
+- Optimise for rapid iteration and scientific correctness, not enterprise boilerplate.
+- Avoid premature optimisation and over-engineering.
+- Use type hints where they improve clarity, especially for function signatures and complex data structures.
+
+## Project Architecture
+
+- Dash is the primary application layer.
+- Flask is used only for:
+  - health checks
+  - optional API endpoints
+  - background task integration
+- Cytoscape runs entirely on the frontend via Dash.
+- All data loading and preprocessing happens at application startup or via explicit user actions.
+
+## Preferred Structure
+
+```
+app.py                  # Dash app initialization + Flask server setup
+data_loader.py          # Data ingestion & preprocessing (pure functions)
+styles_cyto.py          # Cytoscape stylesheets (pure functions)
+callbacks/
+  graph_callbacks.py    # Dash callbacks for Cytoscape graph interactions
+  ui_callbacks.py       # Dash callbacks for UI controls (buttons, filters, etc.)
+utils/
+  transforms.py         # Pure data transforms (no Dash dependencies)
+  validation.py         # Data validation functions
+  layout_configs.py     # Cytoscape layout configuration helpers
+```
+
+**File Organization Rules:**
+- Keep `app.py` minimal: app initialization, layout definition, and route registration only.
+- All callback logic goes in `callbacks/` modules.
+- All pure data transformations go in `utils/transforms.py`.
+- All Cytoscape styling goes in `styles_cyto.py`.
+- Helper functions used by callbacks should live in the same module or `utils/`.
+
+## Dash Guidelines
+
+### Callback Patterns
+
+- Use Dash callbacks as the default interaction mechanism.
+- Keep callbacks small and single-purpose (ideally < 50 lines).
+- Avoid side effects inside callbacks (no file I/O, network calls, or global state mutations).
+- Use `dcc.Store` for shared state instead of global variables.
+- Prefer pure functions inside callbacks; extract complex logic to `utils/`.
+- When a callback has multiple outputs, ensure all outputs are always returned (use `no_update` sparingly).
+- Use `prevent_initial_call=True` when callbacks should only run on user interaction.
+- Use `prevent_initial_call=False` only when the callback must run on initial page load.
+
+### State Management
+
+- Use `dcc.Store` components for:
+  - Large datasets that shouldn't be recomputed
+  - UI state that needs to persist across callbacks
+  - Intermediate computation results
+- Use component `State` for:
+  - Values needed for computation but not triggering updates
+- Avoid storing computed values in `dcc.Store` if they can be derived from other stores.
+
+### Error Handling in Callbacks
+
+- Handle errors and edge cases at the beginning of callbacks.
+- Use guard clauses and early returns to avoid deep nesting.
+- Return appropriate default values (empty lists, None, empty strings) rather than raising exceptions.
+- Log errors with context (use Python's `logging` module, not `print`).
+- Never silently swallow errors inside Dash callbacks.
+
+## Cytoscape-Specific Rules
+
+### Element Structure
+
+- Cytoscape elements must always be returned as dictionaries with:
+  - `"data"` containing node or edge attributes (required)
+  - `"classes"` for styling (optional, use sparingly)
+  - `"position"` only when explicitly needed (let layouts compute positions)
+- Node `data` must include at minimum: `id`, `label`.
+- Edge `data` must include: `id`, `source`, `target`.
+
+### Stylesheets
+
+- All Cytoscape stylesheets must live in `styles_cyto.py`.
+- Stylesheet functions should return lists of style dictionaries.
+- Use selector specificity carefully: prefer `node[attribute]` over classes when possible.
+- Document non-obvious style choices with inline comments.
+
+### Layouts
+
+- Do not compute layouts inside callbacks unless required for dynamic updates.
+- Prefer client-side layout updates over server recomputation.
+- Store layout configurations in `utils/layout_configs.py` as pure functions.
+- Use `animate: False` for initial layouts to improve performance.
+- Use `animate: True` only when layout changes should be visually smooth.
+
+### Performance
+
+- For graphs with > 1000 nodes, consider:
+  - Virtualization or pagination
+  - Lazy loading of node metadata
+  - Debouncing layout updates
+  - Using `minZoom` and `maxZoom` to prevent performance issues
+
+## Flask Usage (Restricted)
+
+- Flask exists under Dash, not alongside it.
+- Access Flask server via `app.server` (Dash's underlying Flask instance).
+- Do not build Flask-RESTful APIs unless explicitly required.
+- Allowed Flask routes include:
+  - Simple health checks (`/health`)
+  - Optional data export endpoints
+  - Background task status endpoints
+- Avoid Flask-RESTful, Marshmallow, SQLAlchemy, and JWT unless explicitly requested.
+- Do not create separate Flask blueprints unless the application explicitly requires modular routing.
+
+## Data Loading and Processing
+
+### Data Loader Module
+
+- `data_loader.py` should contain pure functions that:
+  - Load data from files (`.wsp`, `.fcs`, etc.)
+  - Parse and validate input data
+  - Return structured dictionaries or dataclasses
+  - Handle file I/O errors gracefully
+- Functions should be testable in isolation (no Dash dependencies).
+- Cache expensive parsing operations at module level if appropriate.
+
+### Data Validation
+
+- Validate data structure and types early (in `data_loader.py` or `utils/validation.py`).
+- Use descriptive error messages that identify the source of invalid data.
+- Fail fast with informative exceptions during data loading.
+- Validate Cytoscape element structure before passing to components.
+
+## Error Handling
+
+- Handle errors and edge cases at the beginning of functions.
+- Use guard clauses and early returns to avoid deep nesting.
+- Fail fast with informative error messages.
+- Never silently swallow errors inside Dash callbacks.
+- Use Python's `logging` module for error logging (configure at app startup).
+- In callbacks, return safe defaults rather than raising exceptions.
+
+## Performance and Scale
+
+- Assume large datasets (10^5 to 10^6 events, 10^3 to 10^4 nodes).
+- Prefer vectorised NumPy or pandas operations over loops.
+- Precompute expensive transformations in `data_loader.py` or at app startup.
+- Avoid per-callback recomputation of raw data; use `dcc.Store` to cache.
+- Cache expensive operations manually when appropriate (e.g., `@functools.lru_cache` for pure functions).
+- Profile before optimising; use `cProfile` or Dash's built-in profiling.
+
+## Style and Conventions
+
+### Naming
+
+- Use `snake_case` for variables, functions, and files.
+- Use `UPPER_CASE` for module-level constants.
+- Use descriptive variable names with auxiliary verbs (e.g., `is_valid`, `has_edges`, `should_show_leaves`).
+- Prefix callback functions with the component they update (e.g., `update_graph_elements`, `toggle_leaf_visibility`).
+
+### Code Organization
+
+- Use explicit keyword arguments (Receive an Object, Return an Object pattern where applicable).
+- Group related functions together with clear section comments.
+- Keep imports organized: standard library, third-party, local (separated by blank lines).
+- Use type hints for function signatures, especially for complex data structures.
+
+### Documentation
+
+- Write docstrings for all public functions (those used across modules).
+- Use inline comments for non-obvious logic or scientific domain knowledge.
+- Document Cytoscape layout parameter choices when they're non-default.
+- Keep comments concise and technical.
+
+## Testing Considerations
+
+- Write unit tests for pure functions in `utils/` and `data_loader.py`.
+- Test callback logic by extracting pure functions where possible.
+- Use pytest for testing.
+- Mock Dash components in tests; test callback logic separately from Dash integration.
+
+## Configuration
+
+- Use environment variables for file paths and configuration (via `os.getenv` or `python-dotenv`).
+- Avoid hardcoding paths; use `pathlib.Path` for path construction.
+- Store default configuration values as module-level constants.
+
+## What Not to Do
+
+- Do not introduce class-based APIs unnecessarily.
+- Do not split Dash into microservices.
+- Do not replace Dash callbacks with REST calls.
+- Do not add authentication, ORMs, or migrations unless explicitly requested.
+- Do not use global variables for state (use `dcc.Store` instead).
+- Do not mix data loading logic with callback logic.
+- Do not compute Cytoscape layouts on the server unless necessary.
+- Do not use `print()` for logging; use the `logging` module.
+- Do not create circular dependencies between modules.
+
+## Primary Goal
+
+Build a clean, debuggable, interactive scientific application using Dash and Cytoscape with minimal ceremony and maximum clarity. Prioritise code that is easy to understand, modify, and extend over code that is clever or abstract.
