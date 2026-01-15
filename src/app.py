@@ -5,6 +5,7 @@ import io
 import base64
 
 import pandas as pd
+import matplotlib
 import matplotlib.cm as cm
 import matplotlib.colors as mcolors
 
@@ -1169,7 +1170,7 @@ def import_csv_and_apply_colors(contents, filename, all_elements, current_elemen
             normalized_values = (df_valid["parameter"] - param_min) / (param_max - param_min)
         
         # Get viridis colormap
-        viridis = cm.get_cmap('viridis')
+        viridis = matplotlib.colormaps['viridis']
         
         # Create mapping of node_name to viridis color
         node_color_map = {}
