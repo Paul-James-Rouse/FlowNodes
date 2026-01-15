@@ -5,8 +5,8 @@ import os
 from dash import Dash, html, dcc, Input, Output, State, callback_context, no_update
 
 import dash_cytoscape as cyto
-from src.wsp_to_cyto import wsp_to_cyto
-from src.styles_cyto import cyto_stylesheet
+from wsp_to_cyto import wsp_to_cyto
+from styles_cyto import cyto_stylesheet
 
 
 # --- Helpers ---
@@ -86,7 +86,9 @@ app = Dash(__name__)
 
 # --- Data ---
 # Load gating tree directly from a FlowJo .wsp file
-wsp_path = (Path(os.getcwd()).parent / 'inputs' / 'FlowJo_tutorial.wsp')
+# Resolve path relative to project root (works when running from src/ or project root)
+project_root = Path(__file__).parent.parent
+wsp_path = project_root / 'inputs' / 'FlowJo_tutorial.wsp'
 # wsp_to_cyto returns: { "nodes": [...], "edges": [...] }
 cy = wsp_to_cyto(wsp_path)
 # Cytoscape wants a single list containing both node + edge elements
@@ -220,8 +222,6 @@ def export_current_view(n_clicks):
         "full": True
     }
 
-
-revent_initial_call=False,
 
 @app.callback(
     Output("cyto-graph", "layout"),
