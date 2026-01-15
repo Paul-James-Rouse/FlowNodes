@@ -33,23 +33,71 @@ def filter_out_leaves(all_elements, keep_root=True):
     return kept_nodes + kept_edges, sorted(leaves)
 
 
-def show_metadata(data):
+def show_node_info(data):
+    """
+    Display node information with name and color prominently.
+    """
     if not data:
-        return "Click a node to see details."
-    rows = []
-    for key, label in [
-        ("label", "Population"),
-        ("panel", "Panel"),
-        ("primary_markers", "Markers"),
-        ("biological_role", "Biological role"),
-        ("x_marker_desc", "X marker desc"),
-        ("y_marker_desc", "Y marker desc"),
-        ("id", "Full path (unique id)"),
-    ]:
-        val = data.get(key)
-        if val:
-            rows.append(html.Div([html.Strong(f"{label}: "), html.Span(str(val))]))
-    return html.Div(rows)
+        return html.Div("Click a node to see details.", style={"padding": "1rem"})
+    
+    # Get node name (label)
+    node_name = data.get("label", data.get("id", "Unknown"))
+    
+    # Get node color - check if node_colour is in data, otherwise use default
+    node_color = data.get("node_colour", "#A0C4FF")
+    
+    # Build the display
+    return html.Div(
+        [
+            html.H4("Node Information", style={"marginTop": 0, "marginBottom": "1rem"}),
+            html.Div(
+                [
+                    html.Strong("Name: "),
+                    html.Span(node_name, style={"fontSize": "1.1rem"}),
+                ],
+                style={"marginBottom": "1rem"},
+            ),
+            html.Div(
+                [
+                    html.Strong("Color: "),
+                    html.Span(
+                        node_color,
+                        style={
+                            "display": "inline-block",
+                            "width": "20px",
+                            "height": "20px",
+                            "backgroundColor": node_color,
+                            "border": "1px solid #333",
+                            "marginLeft": "0.5rem",
+                            "verticalAlign": "middle",
+                        },
+                    ),
+                    html.Span(f" {node_color}", style={"marginLeft": "0.5rem"}),
+                ],
+                style={"marginBottom": "1rem"},
+            ),
+            html.Hr(),
+            html.Div(
+                [
+                    html.Strong("Additional Details:"),
+                    html.Div(
+                        [
+                            html.Div([html.Strong(f"{label}: "), html.Span(str(data.get(key, "N/A")))])
+                            for key, label in [
+                                ("panel", "Panel"),
+                                ("primary_markers", "Markers"),
+                                ("biological_role", "Biological role"),
+                                ("id", "Full path"),
+                            ]
+                            if data.get(key)
+                        ],
+                        style={"marginTop": "0.5rem"},
+                    ),
+                ],
+            ),
+        ],
+        style={"padding": "1rem"},
+    )
 
 
 def get_triggered_id():
@@ -59,26 +107,35 @@ def get_triggered_id():
     )
 
 
-def make_layout(name: str):
-    if name == "breadthfirst":
-        return {
-            "name": "breadthfirst",
-            "directed": True,
-            "spacingFactor": 1.15,
-            "padding": 30,
-            "animate": False,
-        }
-    # default: cose
-    return {
-        "name": "cose",
+def make_layout(name: str, **params):
+    """
+    Create a Cytoscape layout configuration.
+    
+    Args:
+        name: Layout type ("cose" or "breadthfirst")
+        **params: Additional layout parameters (spacingFactor, padding, nodeRepulsion, etc.)
+    """
+    base_layout = {
+        "name": name,
         "directed": True,
-        "padding": 50,
         "animate": False,
-        "randomize": False,  # ← critical for non-random initial positions
-        "nodeOverlap": 1,
-        #"idealEdgeLength": 200,  # ← increase this (default ≈ 100)
-        "nodeRepulsion": 20_000,  # pushes nodes apart (default ≈ 4000)
     }
+    
+    if name == "breadthfirst":
+        base_layout.update({
+            "spacingFactor": params.get("spacingFactor", 1.15),
+            "padding": params.get("padding", 30),
+        })
+    else:  # cose
+        base_layout.update({
+            "padding": params.get("padding", 50),
+            "randomize": False,
+            "nodeOverlap": 1,
+            "nodeRepulsion": params.get("nodeRepulsion", 20_000),
+            "idealEdgeLength": params.get("idealEdgeLength", 200),
+        })
+    
+    return base_layout
 
 
 # --- App ---
@@ -98,30 +155,24 @@ elements_all = cy["nodes"] + cy["edges"]
 elements_filtered, initial_leaves = filter_out_leaves(elements_all, keep_root=True)
 print(f"⚡ Loaded WSP with {len(elements_filtered)} elements (removed {len(initial_leaves)} leaves)")
 
-elements = elements_filtered
-
-elements_filtered, initial_leaves = filter_out_leaves(elements_all, keep_root=True)
-print(f"⚡ Loaded with {len(elements_filtered)} nodes (removed {len(initial_leaves)} leaves)")
-
 elements = elements_filtered  # start with leaves hidden
 
 # --- Client-side stores & controls ---
 stores = [
     dcc.Store(id="all-elements", data=elements_all),
     dcc.Store(id="leaves-hidden", data=True),  # start with leaves already hidden
+    dcc.Store(id="current-layout-type", data="breadthfirst"),  # track current layout type
+    dcc.Store(id="layout-params", data={"spacingFactor": 1.15, "padding": 30, "nodeRepulsion": 20000, "idealEdgeLength": 200}),
 ]
 
-controls = html.Div(
-    [
-        html.Button("Show leaf nodes", id="btn-toggle-leaves", n_clicks=0, style={"marginBottom": "0.5rem"}),
-        html.Div(id="leaf-status", style={"fontSize": "0.9rem", "opacity": 0.75}),
-        html.Hr(),
-        html.Button("Export (Current View)", id="btn-export-png", n_clicks=0),
-        html.Hr(),
-        html.Button("Switch to breadthfirst", id="btn-toggle-layout", n_clicks=0),
-    ],
-    style={"display": "flex", "flexDirection": "column", "gap": "0.25rem"},
-)
+# Window styling constants
+WINDOW_STYLE = {
+    "border": "1px solid #ddd",
+    "borderRadius": "4px",
+    "padding": "1rem",
+    "backgroundColor": "#fafafa",
+    "overflow": "auto",
+}
 
 # --- Layout ---
 app.layout = html.Div(
@@ -129,28 +180,144 @@ app.layout = html.Div(
         *stores,
         html.Div(
             [
-                controls,
-                cyto.Cytoscape(
-                    id="cyto-graph",
-                    elements=elements,
-                    layout=make_layout("breadthfirst"),  # ← use tuned layout here
-                    stylesheet=cyto_stylesheet(),
-                    style={"height": "90vh", "width": "100%"},
-                    minZoom=0.2,
-                    maxZoom=2.5,
-                    boxSelectionEnabled=True,
+                # Top Left: Cytoscape Graph
+                html.Div(
+                    [
+                        html.H4("Network Visualization", style={"marginTop": 0}),
+                        cyto.Cytoscape(
+                            id="cyto-graph",
+                            elements=elements,
+                            layout=make_layout("breadthfirst"),
+                            stylesheet=cyto_stylesheet(),
+                            style={"height": "calc(70vh - 80px)", "width": "100%"},
+                            minZoom=0.2,
+                            maxZoom=2.5,
+                            boxSelectionEnabled=True,
+                        ),
+                    ],
+                    style={
+                        **WINDOW_STYLE,
+                        "gridColumn": "1",
+                        "gridRow": "1",
+                    },
+                ),
+                # Top Right: Node Information
+                html.Div(
+                    [
+                        html.Div(id="node-info-panel", children="Click a node to see details."),
+                    ],
+                    style={
+                        **WINDOW_STYLE,
+                        "gridColumn": "2",
+                        "gridRow": "1",
+                    },
+                ),
+                # Bottom Left: Layout Controls
+                html.Div(
+                    [
+                        html.H4("Layout Controls", style={"marginTop": 0}),
+                        html.Div(id="layout-type-display", style={"marginBottom": "1rem"}),
+                        html.Button("Switch Layout", id="btn-toggle-layout", n_clicks=0, style={"marginBottom": "1rem"}),
+                        # All sliders always exist, but will be shown/hidden based on layout type
+                        html.Div(
+                            [
+                                html.Div(
+                                    [
+                                        html.Label("Spacing Factor:", style={"display": "block", "marginTop": "0.5rem"}),
+                                        dcc.Slider(
+                                            id="slider-spacing-factor",
+                                            min=0.5,
+                                            max=3.0,
+                                            step=0.05,
+                                            value=1.15,
+                                            marks={0.5: "0.5", 1.5: "1.5", 3.0: "3.0"},
+                                            tooltip={"placement": "bottom", "always_visible": True},
+                                        ),
+                                        html.Label("Padding:", style={"display": "block", "marginTop": "1rem"}),
+                                        dcc.Slider(
+                                            id="slider-padding-bf",
+                                            min=0,
+                                            max=100,
+                                            step=5,
+                                            value=30,
+                                            marks={0: "0", 50: "50", 100: "100"},
+                                            tooltip={"placement": "bottom", "always_visible": True},
+                                        ),
+                                    ],
+                                    id="breadthfirst-controls",
+                                ),
+                                html.Div(
+                                    [
+                                        html.Label("Node Repulsion:", style={"display": "block", "marginTop": "0.5rem"}),
+                                        dcc.Slider(
+                                            id="slider-node-repulsion",
+                                            min=1000,
+                                            max=50000,
+                                            step=1000,
+                                            value=20000,
+                                            marks={1000: "1k", 25000: "25k", 50000: "50k"},
+                                            tooltip={"placement": "bottom", "always_visible": True},
+                                        ),
+                                        html.Label("Ideal Edge Length:", style={"display": "block", "marginTop": "1rem"}),
+                                        dcc.Slider(
+                                            id="slider-edge-length",
+                                            min=50,
+                                            max=500,
+                                            step=10,
+                                            value=200,
+                                            marks={50: "50", 250: "250", 500: "500"},
+                                            tooltip={"placement": "bottom", "always_visible": True},
+                                        ),
+                                        html.Label("Padding:", style={"display": "block", "marginTop": "1rem"}),
+                                        dcc.Slider(
+                                            id="slider-padding-cose",
+                                            min=0,
+                                            max=100,
+                                            step=5,
+                                            value=50,
+                                            marks={0: "0", 50: "50", 100: "100"},
+                                            tooltip={"placement": "bottom", "always_visible": True},
+                                        ),
+                                    ],
+                                    id="cose-controls",
+                                ),
+                            ],
+                            id="layout-parameter-controls",
+                        ),
+                    ],
+                    style={
+                        **WINDOW_STYLE,
+                        "gridColumn": "1",
+                        "gridRow": "2",
+                    },
+                ),
+                # Bottom Right: Action Buttons
+                html.Div(
+                    [
+                        html.H4("Actions", style={"marginTop": 0}),
+                        html.Button("Toggle Leaf Nodes", id="btn-toggle-leaves", n_clicks=0, style={"marginBottom": "0.5rem", "width": "100%"}),
+                        html.Div(id="leaf-status", style={"fontSize": "0.9rem", "opacity": 0.75, "marginBottom": "1rem"}),
+                        html.Button("Export PNG", id="btn-export-png", n_clicks=0, style={"width": "100%"}),
+                    ],
+                    style={
+                        **WINDOW_STYLE,
+                        "gridColumn": "2",
+                        "gridRow": "2",
+                    },
                 ),
             ],
-            style={"width": "65%", "display": "inline-block", "verticalAlign": "top", "padding": "0 1rem"},
+            style={
+                "display": "grid",
+                "gridTemplateColumns": "1fr 1fr",
+                "gridTemplateRows": "70vh 30vh",
+                "gap": "1rem",
+                "padding": "1rem",
+                "height": "100vh",
+                "boxSizing": "border-box",
+            },
         ),
-        html.Div(
-            [
-                html.H4("Gate metadata"),
-                html.Div(id="metadata-panel", children="Click a node to see details."),
-            ],
-            style={"width": "35%", "display": "inline-block", "verticalAlign": "top"},
-        ),
-    ]
+    ],
+    style={"margin": 0, "padding": 0, "height": "100vh", "overflow": "hidden"},
 )
 
 
@@ -198,11 +365,11 @@ def toggle_leaves(n_clicks, leaves_hidden, all_elements):
 
 
 @app.callback(
-    Output("metadata-panel", "children"),
+    Output("node-info-panel", "children"),
     Input("cyto-graph", "tapNodeData"),
 )
-def update_metadata_panel(tap_node_data):
-    return show_metadata(tap_node_data)
+def update_node_info_panel(tap_node_data):
+    return show_node_info(tap_node_data)
 
 
 @app.callback(
@@ -225,21 +392,116 @@ def export_current_view(n_clicks):
 
 @app.callback(
     Output("cyto-graph", "layout"),
-    Output("btn-toggle-layout", "children"),
+    Output("current-layout-type", "data"),
+    Output("layout-type-display", "children"),
+    Output("breadthfirst-controls", "style"),
+    Output("cose-controls", "style"),
     Input("btn-toggle-layout", "n_clicks"),
-    State("cyto-graph", "layout"),
+    Input("layout-params", "data"),
+    State("current-layout-type", "data"),
     prevent_initial_call=False,
 )
+def update_layout(n_clicks, layout_params, current_layout_type):
+    """
+    Update layout type and parameters, and show/hide appropriate controls.
+    """
+    triggered_id = get_triggered_id()
+    
+    # Determine layout type
+    if triggered_id == "btn-toggle-layout" and n_clicks:
+        # Toggle layout type
+        new_layout_type = "cose" if current_layout_type == "breadthfirst" else "breadthfirst"
+    else:
+        # Use current layout type (initial load or parameter update)
+        new_layout_type = current_layout_type or "breadthfirst"
+    
+    # Ensure layout_params is not None
+    if layout_params is None:
+        layout_params = {"spacingFactor": 1.15, "padding": 30, "nodeRepulsion": 20000, "idealEdgeLength": 200}
+    
+    # Create layout with current parameters
+    layout = make_layout(new_layout_type, **layout_params)
+    
+    # Create layout type display
+    layout_display = html.Div(
+        [
+            html.Strong("Current Layout: "),
+            html.Span(new_layout_type.upper(), style={"fontSize": "1.1rem", "fontWeight": "bold"}),
+        ],
+    )
+    
+    # Show/hide controls based on layout type
+    if new_layout_type == "breadthfirst":
+        bf_style = {"display": "block"}
+        cose_style = {"display": "none"}
+    else:  # cose
+        bf_style = {"display": "none"}
+        cose_style = {"display": "block"}
+    
+    return layout, new_layout_type, layout_display, bf_style, cose_style
 
-def toggle_layout(n_clicks, current_layout):
-    # Initial load: start with breadthfirst layout
-    if not n_clicks:
-        return make_layout("breadthfirst"), "Switch to cose"
 
-    current_name = (current_layout or {}).get("name", "breadthfirst")
-    next_name = "breadthfirst" if current_name != "breadthfirst" else "cose"
-    next_label = "Switch to cose" if next_name == "breadthfirst" else "Switch to breadthfirst"
-    return make_layout(next_name), next_label
+@app.callback(
+    Output("layout-params", "data"),
+    Input("slider-spacing-factor", "value"),
+    Input("slider-padding-bf", "value"),
+    Input("slider-node-repulsion", "value"),
+    Input("slider-edge-length", "value"),
+    Input("slider-padding-cose", "value"),
+    State("layout-params", "data"),
+    State("current-layout-type", "data"),
+    prevent_initial_call=True,
+)
+def update_layout_params(spacing_factor, padding_bf, node_repulsion, edge_length, padding_cose, current_params, layout_type):
+    """
+    Update layout parameters when sliders change.
+    """
+    if not current_params:
+        current_params = {"spacingFactor": 1.15, "padding": 30, "nodeRepulsion": 20000, "idealEdgeLength": 200}
+    
+    # Create a copy to avoid mutating the state
+    updated_params = current_params.copy()
+    
+    # Update parameters based on which slider was triggered
+    triggered_id = get_triggered_id()
+    
+    if triggered_id == "slider-spacing-factor" and spacing_factor is not None:
+        updated_params["spacingFactor"] = spacing_factor
+    elif triggered_id == "slider-padding-bf" and padding_bf is not None:
+        updated_params["padding"] = padding_bf
+    elif triggered_id == "slider-node-repulsion" and node_repulsion is not None:
+        updated_params["nodeRepulsion"] = node_repulsion
+    elif triggered_id == "slider-edge-length" and edge_length is not None:
+        updated_params["idealEdgeLength"] = edge_length
+    elif triggered_id == "slider-padding-cose" and padding_cose is not None:
+        updated_params["padding"] = padding_cose
+    
+    return updated_params
+
+
+@app.callback(
+    Output("slider-spacing-factor", "value"),
+    Output("slider-padding-bf", "value"),
+    Output("slider-node-repulsion", "value"),
+    Output("slider-edge-length", "value"),
+    Output("slider-padding-cose", "value"),
+    Input("layout-params", "data"),
+    prevent_initial_call=True,
+)
+def update_slider_values(layout_params):
+    """
+    Update slider values when layout parameters change (e.g., when switching layouts).
+    """
+    if not layout_params:
+        layout_params = {"spacingFactor": 1.15, "padding": 30, "nodeRepulsion": 20000, "idealEdgeLength": 200}
+    
+    return (
+        layout_params.get("spacingFactor", 1.15),
+        layout_params.get("padding", 30),
+        layout_params.get("nodeRepulsion", 20000),
+        layout_params.get("idealEdgeLength", 200),
+        layout_params.get("padding", 50),
+    )
 
 
 # --- Main ---
