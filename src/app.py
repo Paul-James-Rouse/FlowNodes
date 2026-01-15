@@ -309,15 +309,16 @@ app.layout = html.Div(
             style={
                 "display": "grid",
                 "gridTemplateColumns": "1fr 1fr",
-                "gridTemplateRows": "70vh 30vh",
+                "gridTemplateRows": "calc(65vh - 0.5rem) calc(30vh - 0.5rem)",
                 "gap": "1rem",
                 "padding": "1rem",
-                "height": "100vh",
+                "paddingBottom": "15rem",
+                "height": "calc(100vh - 2rem)",
                 "boxSizing": "border-box",
             },
         ),
     ],
-    style={"margin": 0, "padding": 0, "height": "100vh", "overflow": "hidden"},
+    style={"margin": 0, "padding": 0, "paddingBottom": "2rem", "height": "100vh", "overflow": "auto"},
 )
 
 
