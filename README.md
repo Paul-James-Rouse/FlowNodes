@@ -1,35 +1,35 @@
 # FlowNodes
 
-An interactive web application for visualizing and editing FlowJo gating tree networks. FlowNodes provides an intuitive interface to explore, customize, and export cytometry gating hierarchies with advanced visualization and styling options.
+An interactive web application for visualising and editing FlowJo gating tree networks. FlowNodes provides an intuitive interface to explore, customise, and export cytometry gating hierarchies with advanced visualisation and styling options.
 
 ## Features
 
-### Network Visualization
+### Network Visualisation
 - **Interactive Graph**: Explore FlowJo gating trees as interactive network diagrams
 - **Multiple Layouts**: Choose between Breadthfirst (hierarchical) or Cose (force-directed) layouts
-- **Customizable Layout Parameters**: Fine-tune spacing, padding, node repulsion, and edge lengths with intuitive sliders
+- **Customisable Layout Parameters**: Fine-tune spacing, padding, node repulsion, and edge lengths with intuitive sliders
 - **Zoom & Pan**: Navigate large networks with zoom (0.2x to 2.5x) and pan controls
 - **Show/Hide Leaf Nodes**: Toggle visibility of terminal nodes to focus on the hierarchy structure
 
 ### Node Editing
 - **Node Selection**: Click any node to view and edit its properties
 - **Edit Node Name**: Rename nodes directly in the interface
-- **Color Customization**: 
-  - Choose from a curated color palette
-  - Enter custom hex color codes
-  - Visual color preview before applying
+- **Colour Customisation**: 
+  - Choose from a curated colour palette
+  - Enter custom hex colour codes
+  - Visual colour preview before applying
 - **Shape Selection**: Choose from 8 node shapes (ellipse, rectangle, triangle, diamond, pentagon, hexagon, star, round-rectangle)
-- **Bulk Operations**: Apply color or shape to all downstream nodes with a single click
+- **Bulk Operations**: Apply colour or shape to all downstream nodes with a single click
 
 ### Data Import & Export
-- **CSV Export**: Export network data with columns: `node_name`, `shape`, `color`, `parameter`
-- **CSV Import**: Import CSV files to automatically apply viridis color schemes based on numeric parameter values
+- **CSV Export**: Export network data with columns: `node_name`, `shape`, `colour`, `parameter`
+- **CSV Import**: Import CSV files to automatically apply viridis colour schemes based on numeric parameter values
 - **Automatic Processing**: CSV files are processed immediately upon upload (drag-and-drop or file picker)
 - **High-Quality PNG Export**: Export the entire network at 10x resolution (up to 8000x8000px) for publication-quality figures
 
-### Color Mapping
-- **Viridis Colormap**: Automatically map numeric parameter values to the scientific viridis color scheme
-- **Normalization**: Parameter values are automatically normalized for optimal color distribution
+### Colour Mapping
+- **Viridis Colormap**: Automatically map numeric parameter values to the scientific viridis colour scheme
+- **Normalisation**: Parameter values are automatically normalised for optimal colour distribution
 - **Missing Node Handling**: Clear warnings when imported nodes don't match existing network nodes
 
 ## Installation
@@ -66,7 +66,7 @@ python src/app.py
 1. **Load a Network**: The application automatically loads the FlowJo workspace file from `inputs/FlowJo_tutorial.wsp` on startup
 
 2. **Explore the Network**: 
-   - The network visualization appears in the top-left panel
+   - The network visualisation appears in the top-left panel
    - By default, leaf nodes are hidden to show the hierarchy structure
    - Use mouse wheel to zoom, click and drag to pan
 
@@ -78,15 +78,15 @@ python src/app.py
 
 2. **Edit Properties**:
    - **Name**: Type directly in the name field
-   - **Color**: Click the color button to open the color picker modal
-     - Choose from the color palette
+   - **Colour**: Click the colour button to open the colour picker modal
+     - Choose from the colour palette
      - Or enter a hex code (e.g., `#FF5733`)
      - Click "Apply" to save
    - **Shape**: Select from the dropdown menu
 
 3. **Apply to Downstream Nodes**:
-   - After setting a node's color or shape, click:
-     - **"Apply Color"** to copy the color to all descendant nodes
+   - After setting a node's colour or shape, click:
+     - **"Apply Colour"** to copy the colour to all descendant nodes
      - **"Apply Shape"** to copy the shape to all descendant nodes
 
 ### Layout Controls
@@ -121,18 +121,18 @@ python src/app.py
 
 **Export CSV**:
 - Click "Export CSV" to download network data
-- Contains: `node_name`, `shape`, `color`, `parameter` columns
+- Contains: `node_name`, `shape`, `colour`, `parameter` columns
 - The `parameter` column is empty for you to fill with numeric values
-- Use this exported file as a template for importing color mappings
+- Use this exported file as a template for importing colour mappings
 
 **Import CSV**:
-1. Prepare a CSV file with columns: `node_name`, `shape`, `color`, `parameter`
-2. Fill the `parameter` column with numeric values you want to visualize
+1. Prepare a CSV file with columns: `node_name`, `shape`, `colour`, `parameter`
+2. Fill the `parameter` column with numeric values you want to visualise
 3. Drag and drop the CSV file into the upload area, or click to select
 4. The application automatically:
    - Validates the file format
-   - Applies viridis color mapping based on parameter values
-   - Updates the network visualization
+   - Applies viridis colour mapping based on parameter values
+   - Updates the network visualisation
    - Shows success message or warnings for missing nodes
 
 ### CSV Import Format
@@ -143,8 +143,8 @@ Your CSV file must have these exact columns:
 |--------|-------------|---------|
 | `node_name` | Node label or ID | `root_Lymphocytes` |
 | `shape` | Node shape | `ellipse` |
-| `color` | Current color (can be empty) | `#A0C4FF` |
-| `parameter` | Numeric value for color mapping | `42.5` |
+| `colour` | Current colour (can be empty) | `#A0C4FF` |
+| `parameter` | Numeric value for colour mapping | `42.5` |
 
 **Important Notes**:
 - Column names must match exactly (case-sensitive)
@@ -169,7 +169,7 @@ FlowNodes/
 ## Tips & Best Practices
 
 1. **Large Networks**: For networks with many nodes, start with leaf nodes hidden for better performance
-2. **Color Mapping**: Use the CSV export/import workflow to apply color schemes based on experimental data
+2. **Colour Mapping**: Use the CSV export/import workflow to apply colour schemes based on experimental data
 3. **Layout Tuning**: Adjust layout parameters gradually - small changes can have significant visual impact
 4. **PNG Export**: High-resolution exports may take a few seconds for large networks - be patient
 5. **Node Matching**: When importing CSV, ensure node names exactly match the network (check spelling and case)
@@ -182,7 +182,7 @@ FlowNodes/
 - Ensure the FlowJo workspace file exists in `inputs/FlowJo_tutorial.wsp`
 
 **CSV import fails**:
-- Verify column names match exactly: `node_name`, `shape`, `color`, `parameter`
+- Verify column names match exactly: `node_name`, `shape`, `colour`, `parameter`
 - Check that parameter column contains numeric values (not text)
 - Ensure node names in CSV match existing network nodes
 
@@ -201,7 +201,7 @@ FlowNodes/
 - **Framework**: Dash (Plotly)
 - **Visualization**: Dash Cytoscape (Cytoscape.js)
 - **Data Processing**: FlowKit, pandas
-- **Color Mapping**: Matplotlib viridis colormap
+- **Colour Mapping**: Matplotlib viridis colormap
 - **Export Resolution**: 10x scale, max 8000x8000 pixels
 
 ## License
