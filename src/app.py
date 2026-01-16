@@ -10,7 +10,7 @@ import matplotlib
 import matplotlib.cm as cm
 import matplotlib.colors as mcolors
 
-from dash import Dash, html, dcc, Input, Output, State, callback_context, no_update, ALL
+from dash import Dash, html, dcc, Input, Output, State, callback_context, no_update, ALL, clientside_callback, ClientsideFunction
 
 import dash_cytoscape as cyto
 from wsp_to_cyto import wsp_to_cyto
@@ -620,6 +620,7 @@ stores = [
     dcc.Store(id="color-picker-modal-open", data=False),  # track if colour picker modal is open
     dcc.Store(id="color-picker-selected", data=None),  # temporarily store selected colour before applying
     dcc.Store(id="hidden-nodes-state", data={"upstream": False, "downstream": False, "node_id": None}),  # track which nodes are hidden
+    dcc.Store(id="fullscreen-mode", data=False),  # track fullscreen mode state
 ]
 
 # Window styling constants
@@ -659,6 +660,24 @@ app.index_string = '''
                 transform: scale(1.05);
                 box-shadow: 0 2px 6px rgba(0, 0, 0, 0.2);
             }
+            /* Fullscreen mode styles */
+            #visualiser-container.fullscreen {
+                position: fixed !important;
+                top: 0 !important;
+                left: 0 !important;
+                width: 100vw !important;
+                height: 100vh !important;
+                z-index: 9999 !important;
+                gridColumn: unset !important;
+                gridRow: unset !important;
+                margin: 0 !important;
+                border: none !important;
+                borderRadius: 0 !important;
+                padding: 1rem !important;
+            }
+            #visualiser-container.fullscreen #cyto-graph {
+                height: calc(100vh - 100px) !important;
+            }
         </style>
     </head>
     <body>
@@ -681,8 +700,30 @@ app.layout = html.Div(
             [
                 # Top Left: Cytoscape Graph
                 html.Div(
-                    [
-                        html.H4("Network Visualisation", style={"marginTop": 0}),
+                    id="visualiser-container",
+                    children=[
+                        html.Div(
+                            [
+                                html.H4("Network Visualisation", style={"marginTop": 0, "flex": "1"}),
+                                html.Button(
+                                    "⛶",
+                                    id="btn-fullscreen",
+                                    n_clicks=0,
+                                    title="Toggle fullscreen",
+                                    style={
+                                        "padding": "0.25rem 0.5rem",
+                                        "fontSize": "1.2rem",
+                                        "cursor": "pointer",
+                                        "border": "1px solid #ccc",
+                                        "borderRadius": "4px",
+                                        "backgroundColor": "#fff",
+                                        "color": "#333",
+                                        "marginLeft": "0.5rem",
+                                    },
+                                ),
+                            ],
+                            style={"display": "flex", "alignItems": "center", "marginBottom": "0.5rem"},
+                        ),
                 cyto.Cytoscape(
                     id="cyto-graph",
                     elements=elements,
@@ -2069,6 +2110,67 @@ def hide_or_show_upstream_or_downstream_nodes(button_clicks, selected_node_id, a
     updated_node_info = show_node_info(selected_node_data, all_elements, new_hidden_state)
     
     return filtered_elements, new_hidden_state, updated_node_info
+
+
+@app.callback(
+    Output("visualiser-container", "className"),
+    Output("btn-fullscreen", "title"),
+    Input("btn-fullscreen", "n_clicks"),
+    State("fullscreen-mode", "data"),
+    prevent_initial_call=True,
+)
+def toggle_fullscreen(n_clicks, is_fullscreen):
+    """
+    Toggle fullscreen mode for the visualiser.
+    """
+    if not n_clicks:
+        return no_update, no_update
+    
+    new_fullscreen = not is_fullscreen
+    
+    if new_fullscreen:
+        return "fullscreen", "Exit fullscreen (ESC)"
+    else:
+        return "", "Toggle fullscreen"
+
+
+
+
+@app.callback(
+    Output("fullscreen-mode", "data"),
+    Input("visualiser-container", "className"),
+    prevent_initial_call=True,
+)
+def update_fullscreen_state(className):
+    """
+    Update fullscreen state store based on className.
+    """
+    return className == "fullscreen"
+
+
+# Clientside callback for ESC key to exit fullscreen
+app.clientside_callback(
+    """
+    function(className) {
+        if (className === 'fullscreen') {
+            var handleEscape = function(e) {
+                if (e.key === 'Escape') {
+                    var btn = document.getElementById('btn-fullscreen');
+                    if (btn) {
+                        btn.click();
+                    }
+                    document.removeEventListener('keydown', handleEscape);
+                }
+            };
+            document.addEventListener('keydown', handleEscape);
+        }
+        return window.dash_clientside.no_update;
+    }
+    """,
+    Output("fullscreen-mode", "data", allow_duplicate=True),
+    Input("visualiser-container", "className"),
+    prevent_initial_call=True,
+)
 
 
 # --- Main ---
