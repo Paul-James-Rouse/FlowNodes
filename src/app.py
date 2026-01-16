@@ -3,13 +3,14 @@ from pathlib import Path
 import os
 import io
 import base64
+import tempfile
 
 import pandas as pd
 import matplotlib
 import matplotlib.cm as cm
 import matplotlib.colors as mcolors
 
-from dash import Dash, html, dcc, Input, Output, State, callback_context, no_update, ALL
+from dash import Dash, html, dcc, Input, Output, State, callback_context, no_update, ALL, clientside_callback, ClientsideFunction
 
 import dash_cytoscape as cyto
 from wsp_to_cyto import wsp_to_cyto
@@ -80,12 +81,50 @@ def get_all_downstream_nodes(node_id, all_elements):
     return downstream_nodes
 
 
+def get_all_upstream_nodes(node_id, all_elements):
+    """
+    Find all upstream nodes (ancestors) from a given node.
+    Uses breadth-first search to traverse the graph backwards.
+    
+    Args:
+        node_id: The ID of the starting node
+        all_elements: List of all graph elements (nodes + edges)
+        
+    Returns:
+        Set of node IDs that are upstream from the given node
+    """
+    if not all_elements or not node_id:
+        return set()
+    
+    # Build reverse adjacency list (child -> parent)
+    edges = [el["data"] for el in all_elements if "source" in el.get("data", {})]
+    parent_map = {}
+    for edge in edges:
+        source = edge.get("source")
+        target = edge.get("target")
+        parent_map[target] = source
+    
+    # BFS to find all ancestors
+    upstream_nodes = set()
+    queue = [node_id]
+    
+    while queue:
+        current = queue.pop(0)
+        if current in parent_map:
+            parent = parent_map[current]
+            if parent not in upstream_nodes:
+                upstream_nodes.add(parent)
+                queue.append(parent)
+    
+    return upstream_nodes
+
+
 def get_color_palette():
     """
-    Generate a color palette for the color picker.
-    Returns a list of hex color codes organized in rows.
+    Generate a colour palette for the colour picker.
+    Returns a list of hex colour codes organised in rows.
     """
-    # Common colors for scientific visualization
+    # Common colours for scientific visualisation
     return [
         "#FF6B6B", "#4ECDC4", "#45B7D1", "#FFA07A", "#98D8C8", "#F7DC6F", "#BB8FCE", "#85C1E2",
         "#E74C3C", "#1ABC9C", "#3498DB", "#E67E22", "#27AE60", "#F39C12", "#9B59B6", "#16A085",
@@ -100,11 +139,11 @@ def get_color_palette():
 
 def create_color_picker_modal():
     """
-    Create the color picker modal component.
+    Create the colour picker modal component.
     """
     colors = get_color_palette()
     
-    # Create color swatches
+    # Create colour swatches
     color_swatches = []
     for i, color in enumerate(colors):
         color_swatches.append(
@@ -156,7 +195,7 @@ def create_color_picker_modal():
                 children=[
                     html.Div(
                         [
-                            html.H3("Pick a Color", style={"margin": 0, "marginBottom": "1rem"}),
+                            html.H3("Pick a Colour", style={"margin": 0, "marginBottom": "1rem"}),
                             html.Button(
                                 "×",
                                 id="btn-close-color-picker",
@@ -181,7 +220,7 @@ def create_color_picker_modal():
                     ),
                     html.Div(
                         [
-                            html.Label("Color Palette:", style={"display": "block", "marginBottom": "0.5rem", "fontWeight": "bold"}),
+                            html.Label("Colour Palette:", style={"display": "block", "marginBottom": "0.5rem", "fontWeight": "bold"}),
                             html.Div(
                                 color_swatches,
                                 style={
@@ -268,9 +307,9 @@ def create_color_picker_modal():
     )
 
 
-def show_node_info(data, all_elements=None):
+def show_node_info(data, all_elements=None, hidden_state=None):
     """
-    Display node information with name, color, parent, and children.
+    Display node information with name, colour, parent, and children.
     """
     if not data:
         return html.Div("Click a node to see details.")
@@ -332,7 +371,7 @@ def show_node_info(data, all_elements=None):
         ),
         html.Div(
             [
-                html.Label("Color:", style={"display": "block", "marginBottom": "0.25rem", "fontWeight": "bold"}),
+                html.Label("Colour:", style={"display": "block", "marginBottom": "0.25rem", "fontWeight": "bold"}),
                 html.Button(
                     "",
                     id={"type": "btn-open-color-picker", "node_id": node_id},
@@ -347,7 +386,7 @@ def show_node_info(data, all_elements=None):
                         "padding": 0,
                         "transition": "all 0.2s",
                     },
-                    title="Click to pick a color",
+                    title="Click to pick a colour",
                 ),
             ],
             style={"marginBottom": "1rem"},
@@ -380,7 +419,7 @@ def show_node_info(data, all_elements=None):
                 html.Div(
                     [
                         html.Button(
-                            "Apply Color",
+                            "Apply Colour",
                             id={"type": "btn-apply-downstream", "action": "color", "node_id": node_id},
                             n_clicks=0,
                             style={
@@ -408,6 +447,48 @@ def show_node_info(data, all_elements=None):
                                 "borderRadius": "4px",
                                 "backgroundColor": "#2196F3",
                                 "color": "#fff",
+                            },
+                        ),
+                    ],
+                    style={"display": "flex", "width": "100%"},
+                ),
+            ],
+            style={"marginBottom": "1rem"},
+        ),
+        html.Div(
+            [
+                html.Label("Hide nodes in visualiser:", style={"display": "block", "marginBottom": "0.5rem", "fontWeight": "bold"}),
+                html.Div(
+                    [
+                        html.Button(
+                            "Show Upstream" if (hidden_state and hidden_state.get("upstream") and hidden_state.get("node_id") == node_id) else "Hide Upstream",
+                            id={"type": "btn-hide-nodes", "direction": "upstream", "node_id": node_id},
+                            n_clicks=0,
+                            style={
+                                "flex": "1",
+                                "marginRight": "0.5rem",
+                                "padding": "0.5rem 1rem",
+                                "fontSize": "0.9rem",
+                                "cursor": "pointer",
+                                "border": "1px solid #ccc",
+                                "borderRadius": "4px",
+                                "backgroundColor": "#fff",
+                                "color": "#333",
+                            },
+                        ),
+                        html.Button(
+                            "Show Downstream" if (hidden_state and hidden_state.get("downstream") and hidden_state.get("node_id") == node_id) else "Hide Downstream",
+                            id={"type": "btn-hide-nodes", "direction": "downstream", "node_id": node_id},
+                            n_clicks=0,
+                            style={
+                                "flex": "1",
+                                "padding": "0.5rem 1rem",
+                                "fontSize": "0.9rem",
+                                "cursor": "pointer",
+                                "border": "1px solid #ccc",
+                                "borderRadius": "4px",
+                                "backgroundColor": "#fff",
+                                "color": "#333",
                             },
                         ),
                     ],
@@ -533,11 +614,13 @@ elements = elements_filtered  # start with leaves hidden
 stores = [
     dcc.Store(id="all-elements", data=elements_all),
     dcc.Store(id="leaves-hidden", data=True),  # start with leaves already hidden
-    dcc.Store(id="current-layout-type", data="breadthfirst"),  # track current layout type
+    dcc.Store(id="current-layout-type", data="cose"),  # track current layout type
     dcc.Store(id="layout-params", data={"spacingFactor": 1.15, "padding": 75, "nodeRepulsion": 20000, "idealEdgeLength": 1}),
     dcc.Store(id="selected-node-id", data=None),  # track currently selected node for editing
-    dcc.Store(id="color-picker-modal-open", data=False),  # track if color picker modal is open
-    dcc.Store(id="color-picker-selected", data=None),  # temporarily store selected color before applying
+    dcc.Store(id="color-picker-modal-open", data=False),  # track if colour picker modal is open
+    dcc.Store(id="color-picker-selected", data=None),  # temporarily store selected colour before applying
+    dcc.Store(id="hidden-nodes-state", data={"upstream": False, "downstream": False, "node_id": None}),  # track which nodes are hidden
+    dcc.Store(id="fullscreen-mode", data=False),  # track fullscreen mode state
 ]
 
 # Window styling constants
@@ -564,7 +647,7 @@ app.index_string = '''
             * {
                 font-family: "Inter", -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
             }
-            /* Color picker swatch hover effects */
+            /* Colour picker swatch hover effects */
             [id*="color-swatch"]:hover {
                 transform: scale(1.1);
                 border-color: #333 !important;
@@ -572,10 +655,28 @@ app.index_string = '''
                 z-index: 10;
                 position: relative;
             }
-            /* Color preview button hover effect */
+            /* Colour preview button hover effect */
             [id*="btn-open-color-picker"]:hover {
                 transform: scale(1.05);
                 box-shadow: 0 2px 6px rgba(0, 0, 0, 0.2);
+            }
+            /* Fullscreen mode styles */
+            #visualiser-container.fullscreen {
+                position: fixed !important;
+                top: 0 !important;
+                left: 0 !important;
+                width: 100vw !important;
+                height: 100vh !important;
+                z-index: 9999 !important;
+                gridColumn: unset !important;
+                gridRow: unset !important;
+                margin: 0 !important;
+                border: none !important;
+                borderRadius: 0 !important;
+                padding: 1rem !important;
+            }
+            #visualiser-container.fullscreen #cyto-graph {
+                height: calc(100vh - 100px) !important;
             }
         </style>
     </head>
@@ -599,12 +700,34 @@ app.layout = html.Div(
             [
                 # Top Left: Cytoscape Graph
                 html.Div(
-                    [
-                        html.H4("Network Visualization", style={"marginTop": 0}),
+                    id="visualiser-container",
+                    children=[
+                        html.Div(
+                            [
+                                html.H4("Network Visualisation", style={"marginTop": 0, "flex": "1"}),
+                                html.Button(
+                                    "⛶",
+                                    id="btn-fullscreen",
+                                    n_clicks=0,
+                                    title="Toggle fullscreen",
+                                    style={
+                                        "padding": "0.25rem 0.5rem",
+                                        "fontSize": "1.2rem",
+                                        "cursor": "pointer",
+                                        "border": "1px solid #ccc",
+                                        "borderRadius": "4px",
+                                        "backgroundColor": "#fff",
+                                        "color": "#333",
+                                        "marginLeft": "0.5rem",
+                                    },
+                                ),
+                            ],
+                            style={"display": "flex", "alignItems": "center", "marginBottom": "0.5rem"},
+                        ),
                 cyto.Cytoscape(
                     id="cyto-graph",
                     elements=elements,
-                            layout=make_layout("breadthfirst"),
+                            layout=make_layout("cose"),
                     stylesheet=cyto_stylesheet(),
                             style={"height": "calc(70vh - 80px)", "width": "100%", "backgroundColor": "#ffffff"},
                     minZoom=0.2,
@@ -779,42 +902,70 @@ app.layout = html.Div(
                                 "marginBottom": "1rem",
                             },
                         ),
-                        html.Button(
-                            "Export CSV",
-                            id="btn-export-csv",
-                            n_clicks=0,
+                        html.Div(
+                            [
+                                html.Button(
+                                    "Export CSV",
+                                    id="btn-export-csv",
+                                    n_clicks=0,
+                                    style={
+                                        "flex": "1",
+                                        "marginRight": "0.5rem",
+                                        "padding": "0.5rem 1rem",
+                                        "fontSize": "0.9rem",
+                                        "cursor": "pointer",
+                                        "border": "1px solid #ccc",
+                                        "borderRadius": "4px",
+                                        "backgroundColor": "#fff",
+                                        "color": "#333",
+                                    },
+                                ),
+                                dcc.Upload(
+                                    id="upload-csv",
+                                    children=html.Div("Import CSV with Viridis Colouring"),
+                                    style={
+                                        "flex": "1",
+                                        "padding": "0.5rem 1rem",
+                                        "lineHeight": "1.5",
+                                        "borderWidth": "1px",
+                                        "borderStyle": "dashed",
+                                        "borderRadius": "4px",
+                                        "textAlign": "center",
+                                        "cursor": "pointer",
+                                        "backgroundColor": "#fafafa",
+                                        "borderColor": "#ccc",
+                                        "color": "#333",
+                                        "display": "flex",
+                                        "alignItems": "center",
+                                        "justifyContent": "center",
+                                        "fontSize": "0.9rem",
+                                    },
+                                    multiple=False,
+                                ),
+                            ],
+                            style={"display": "flex", "width": "100%", "marginBottom": "1rem", "alignItems": "stretch"},
+                        ),
+                        dcc.Upload(
+                            id="upload-wsp",
+                            children=html.Div("Import New WSP"),
                             style={
                                 "width": "100%",
                                 "padding": "0.5rem 1rem",
-                                "fontSize": "0.9rem",
-                                "cursor": "pointer",
-                                "border": "1px solid #ccc",
-                                "borderRadius": "4px",
-                                "backgroundColor": "#fff",
-                                "color": "#333",
-                                "marginBottom": "1rem",
-                            },
-                        ),
-                        dcc.Upload(
-                            id="upload-csv",
-                            children=html.Div([
-                                "Drag and Drop or ",
-                                html.A("Select CSV File")
-                            ]),
-                            style={
-                                "width": "100%",
-                                "height": "60px",
-                                "lineHeight": "60px",
+                                "lineHeight": "1.5",
                                 "borderWidth": "1px",
                                 "borderStyle": "dashed",
                                 "borderRadius": "4px",
                                 "textAlign": "center",
-                                "marginBottom": "1rem",
                                 "cursor": "pointer",
                                 "backgroundColor": "#fafafa",
                                 "borderColor": "#ccc",
                                 "color": "#333",
+                                "display": "flex",
+                                "alignItems": "center",
+                                "justifyContent": "center",
+                                "fontSize": "0.9rem",
                             },
+                            accept=".wsp",
                             multiple=False,
                         ),
                     ],
@@ -946,12 +1097,26 @@ def toggle_leaves(show_all_clicks, hide_leaves_clicks, leaves_hidden, all_elemen
 @app.callback(
     Output("node-info-panel", "children"),
     Output("selected-node-id", "data"),
+    Output("hidden-nodes-state", "data", allow_duplicate=True),
+    Output("cyto-graph", "elements", allow_duplicate=True),
     Input("cyto-graph", "tapNodeData"),
     State("all-elements", "data"),
+    State("hidden-nodes-state", "data"),
+    State("cyto-graph", "elements"),
+    prevent_initial_call='initial_duplicate',
 )
-def update_node_info_panel(tap_node_data, all_elements):
+def update_node_info_panel(tap_node_data, all_elements, hidden_state, current_elements):
     node_id = tap_node_data.get("id") if tap_node_data else None
-    return show_node_info(tap_node_data, all_elements), node_id
+    
+    # If selecting a different node, reset hidden state and show all elements
+    if node_id and hidden_state and hidden_state.get("node_id") and hidden_state.get("node_id") != node_id:
+        # Reset hidden state
+        new_hidden_state = {"upstream": False, "downstream": False, "node_id": None}
+        # Show all elements
+        return show_node_info(tap_node_data, all_elements, new_hidden_state), node_id, new_hidden_state, all_elements
+    
+    # Otherwise, keep current state
+    return show_node_info(tap_node_data, all_elements, hidden_state), node_id, no_update, no_update
 
 
 @app.callback(
@@ -966,7 +1131,7 @@ def update_node_info_panel(tap_node_data, all_elements):
 )
 def update_node_properties(label_values, shape_values, all_elements, current_elements, selected_node_id):
     """
-    Update node properties (name, color, shape) when edited in the node info panel.
+    Update node properties (name, colour, shape) when edited in the node info panel.
     """
     if not all_elements or not current_elements or not selected_node_id:
         return no_update, no_update, []
@@ -1077,7 +1242,7 @@ def export_current_view(n_clicks):
 )
 def export_network_to_csv(n_clicks, all_elements):
     """
-    Export network nodes to CSV with columns: node_name, shape, color, parameter
+    Export network nodes to CSV with columns: node_name, shape, colour, parameter
     """
     if not n_clicks or not all_elements:
         return no_update
@@ -1092,7 +1257,7 @@ def export_network_to_csv(n_clicks, all_elements):
         rows.append({
             "node_name": data.get("label", data.get("id", "Unknown")),
             "shape": data.get("node_shape", "ellipse"),
-            "color": data.get("node_colour", "#A0C4FF"),
+            "colour": data.get("node_colour", "#A0C4FF"),
             "parameter": ""  # Empty column for user to fill
         })
     
@@ -1121,7 +1286,7 @@ def export_network_to_csv(n_clicks, all_elements):
 )
 def import_csv_and_apply_colors(contents, filename, all_elements, current_elements):
     """
-    Import CSV file and apply viridis color scheme based on parameter column
+    Import CSV file and apply viridis colour scheme based on parameter column
     """
     if not contents or not filename:
         return no_update, no_update, no_update
@@ -1135,13 +1300,12 @@ def import_csv_and_apply_colors(contents, filename, all_elements, current_elemen
         df = pd.read_csv(io.StringIO(decoded.decode('utf-8')))
         
         # Validate required columns
-        required_columns = ["node_name", "shape", "color", "parameter"]
+        required_columns = ["node_name", "shape", "colour", "parameter"]
         if not all(col in df.columns for col in required_columns):
             return no_update, no_update, html.Div([
                 "Error: CSV must have columns: " + ", ".join(required_columns),
                 html.Br(),
-                "Drag and Drop or ",
-                html.A("Select CSV File")
+                "Import CSV with Viridis Colouring"
             ])
         
         # Filter out rows with missing parameter values
@@ -1155,8 +1319,7 @@ def import_csv_and_apply_colors(contents, filename, all_elements, current_elemen
             return no_update, no_update, html.Div([
                 "Error: No valid numeric parameter values found",
                 html.Br(),
-                "Drag and Drop or ",
-                html.A("Select CSV File")
+                "Import CSV with Viridis Colouring"
             ])
         
         # Calculate min/max for normalization
@@ -1172,7 +1335,7 @@ def import_csv_and_apply_colors(contents, filename, all_elements, current_elemen
         # Get viridis colormap
         viridis = matplotlib.colormaps['viridis']
         
-        # Create mapping of node_name to viridis color
+        # Create mapping of node_name to viridis colour
         node_color_map = {}
         missing_nodes = []
         
@@ -1233,8 +1396,7 @@ def import_csv_and_apply_colors(contents, filename, all_elements, current_elemen
                 warning_msg += f" and {len(missing_nodes) - 5} more"
             upload_children = html.Div([
                 html.Div(warning_msg, style={"color": "#ff9800", "marginBottom": "0.5rem"}),
-                "Drag and Drop or ",
-                html.A("Select CSV File")
+                "Import CSV with Viridis Colouring"
             ])
         else:
             upload_children = html.Div([
@@ -1247,8 +1409,87 @@ def import_csv_and_apply_colors(contents, filename, all_elements, current_elemen
         error_msg = f"Error importing CSV: {str(e)}"
         return no_update, no_update, html.Div([
             html.Div(error_msg, style={"color": "#f44336", "marginBottom": "0.5rem"}),
-            "Drag and Drop or ",
-            html.A("Select CSV File")
+            "Import CSV with Viridis Colouring"
+        ])
+
+
+@app.callback(
+    Output("cyto-graph", "elements", allow_duplicate=True),
+    Output("all-elements", "data", allow_duplicate=True),
+    Output("leaves-hidden", "data", allow_duplicate=True),
+    Output("selected-node-id", "data", allow_duplicate=True),
+    Output("upload-wsp", "children", allow_duplicate=True),
+    Input("upload-wsp", "contents"),
+    State("upload-wsp", "filename"),
+    prevent_initial_call=True,
+)
+def import_wsp_file(contents, filename):
+    """
+    Import WSP file and replace the current network with fresh styling.
+    """
+    if not contents or not filename:
+        return no_update, no_update, no_update, no_update, no_update
+    
+    # Validate file extension
+    if not filename.lower().endswith('.wsp'):
+        error_msg = "Error: File must be a .wsp file"
+        return no_update, no_update, no_update, no_update, html.Div([
+            html.Div(error_msg, style={"color": "#f44336", "marginBottom": "0.5rem"}),
+            "Import New WSP"
+        ])
+    
+    # Parse uploaded file
+    try:
+        content_type, content_string = contents.split(',')
+        decoded = base64.b64decode(content_string)
+        
+        # Save to temporary file
+        with tempfile.NamedTemporaryFile(delete=False, suffix='.wsp') as tmp_file:
+            tmp_file.write(decoded)
+            tmp_path = tmp_file.name
+        
+        try:
+            # Convert WSP to Cytoscape elements
+            cy = wsp_to_cyto(tmp_path)
+            elements_all = cy["nodes"] + cy["edges"]
+            
+            # Apply default styling to all nodes
+            for node in elements_all:
+                if "source" not in node.get("data", {}):
+                    node["data"]["node_colour"] = "#A0C4FF"
+                    node["data"]["node_shape"] = "ellipse"
+            
+            # Filter leaves (start with leaves hidden)
+            elements_filtered, _ = filter_out_leaves(elements_all, keep_root=True)
+            
+            # Create success message
+            upload_children = html.Div(
+                html.Div(
+                    f"Successfully loaded WSP file: {filename} ({len(elements_all)} elements)",
+                    style={"color": "#4CAF50", "marginBottom": "0.5rem"}
+                )
+            )
+            
+            return (
+                elements_filtered,  # cyto-graph elements
+                elements_all,       # all-elements store
+                True,               # leaves-hidden (start with leaves hidden)
+                None,               # selected-node-id (clear selection)
+                upload_children     # upload component message
+            )
+            
+        finally:
+            # Clean up temporary file
+            try:
+                os.unlink(tmp_path)
+            except:
+                pass
+        
+    except Exception as e:
+        error_msg = f"Error loading WSP file: {str(e)}"
+        return no_update, no_update, no_update, no_update, html.Div([
+            html.Div(error_msg, style={"color": "#f44336", "marginBottom": "0.5rem"}),
+            "Import New WSP"
         ])
 
 
@@ -1279,7 +1520,7 @@ def update_layout(bf_clicks, cose_clicks, layout_params, current_layout_type):
         new_layout_type = "cose"
     else:
         # Use current layout type (initial load or parameter update)
-        new_layout_type = current_layout_type or "breadthfirst"
+        new_layout_type = current_layout_type or "cose"
     
     # Ensure layout_params is not None
     if layout_params is None:
@@ -1380,7 +1621,7 @@ def update_layout_params(spacing_factor, padding_bf, node_repulsion, edge_length
     return updated_params
 
 
-# --- Color Picker Modal Callbacks ---
+# --- Colour Picker Modal Callbacks ---
 
 @app.callback(
     Output("color-picker-modal-open", "data"),
@@ -1404,7 +1645,7 @@ def handle_color_picker_modal(
     modal_open, selected_color, selected_node_id, all_elements
 ):
     """
-    Handle opening/closing the color picker modal and color selection.
+    Handle opening/closing the colour picker modal and colour selection.
     """
     ctx = callback_context
     if not ctx.triggered:
@@ -1412,7 +1653,7 @@ def handle_color_picker_modal(
     
     triggered_id = get_triggered_id()
     
-    # Get current node color for initial preview
+    # Get current node colour for initial preview
     current_node_color = "#A0C4FF"
     if selected_node_id and all_elements:
         for el in all_elements:
@@ -1465,7 +1706,7 @@ def handle_color_picker_modal(
         }
         return False, None, modal_style, no_update, no_update
     
-    # Handle color swatch selection
+    # Handle colour swatch selection
     if "color-swatch" in triggered_id:
         colors = get_color_palette()
         try:
@@ -1492,7 +1733,7 @@ def handle_color_picker_modal(
     if triggered_id == "color-picker-hex-input":
         if hex_input:
             hex_input = hex_input.strip()
-            if hex_input.startswith("#") and len(hex_input) == 7:  # Valid hex color
+            if hex_input.startswith("#") and len(hex_input) == 7:  # Valid hex colour
                 preview_style = {
                     "width": "60px",
                     "height": "50px",
@@ -1527,7 +1768,7 @@ def apply_color_from_picker(
     apply_clicks, selected_color, selected_node_id, all_elements, current_elements, current_button_styles
 ):
     """
-    Apply the selected color from the color picker to the node.
+    Apply the selected colour from the colour picker to the node.
     """
     if not apply_clicks or not selected_color or not selected_node_id:
         return no_update, no_update, no_update, no_update, no_update
@@ -1566,7 +1807,7 @@ def apply_color_from_picker(
         "alignItems": "center",
     }
     
-    # Update color preview button style
+    # Update colour preview button style
     # Since only one node is selected at a time, we need to update the button style
     # The button ID is {"type": "btn-open-color-picker", "node_id": selected_node_id}
     # With ALL pattern, we need to return a list matching all buttons
@@ -1617,8 +1858,8 @@ def apply_to_all_downstream(
     color_clicks, shape_clicks, selected_node_id, all_elements, current_elements, shape_values
 ):
     """
-    Apply color or shape to all downstream nodes from the selected node.
-    Uses the current color/shape of the selected node.
+    Apply colour or shape to all downstream nodes from the selected node.
+    Uses the current colour/shape of the selected node.
     """
     if not selected_node_id or not all_elements or not current_elements:
         return no_update, no_update
@@ -1650,7 +1891,7 @@ def apply_to_all_downstream(
     if action == "color":
         if not color_clicks or not any(x and x > 0 for x in color_clicks):
             return no_update, no_update
-        # Get the current color from the selected node
+        # Get the current colour from the selected node
         selected_color = None
         for el in all_elements:
             if "source" not in el.get("data", {}) and el["data"].get("id") == selected_node_id:
@@ -1710,6 +1951,226 @@ def apply_to_all_downstream(
         updated_current.append(el_copy)
     
     return updated_current, updated_all
+
+
+@app.callback(
+    Output("cyto-graph", "elements", allow_duplicate=True),
+    Output("hidden-nodes-state", "data", allow_duplicate=True),
+    Output("node-info-panel", "children", allow_duplicate=True),
+    Input({"type": "btn-hide-nodes", "direction": ALL, "node_id": ALL}, "n_clicks"),
+    State("selected-node-id", "data"),
+    State("all-elements", "data"),
+    State("cyto-graph", "elements"),
+    State("hidden-nodes-state", "data"),
+    prevent_initial_call=True,
+)
+def hide_or_show_upstream_or_downstream_nodes(button_clicks, selected_node_id, all_elements, current_elements, hidden_state):
+    """
+    Hide or show upstream or downstream nodes from the selected node in the visualiser.
+    """
+    if not selected_node_id or not all_elements or not current_elements:
+        return no_update, no_update, no_update
+    
+    triggered = callback_context.triggered[0] if callback_context.triggered else None
+    if not triggered:
+        return no_update, no_update, no_update
+    
+    # Parse the triggered prop_id to get which button was clicked
+    prop_id = triggered["prop_id"]
+    if "btn-hide-nodes" not in prop_id:
+        return no_update, no_update, no_update
+    
+    # Extract direction and node_id from the prop_id
+    import json
+    try:
+        json_part = prop_id.split(".n_clicks")[0]
+        button_info = json.loads(json_part)
+        direction = button_info.get("direction")
+        node_id = button_info.get("node_id")
+    except:
+        return no_update, no_update, no_update
+    
+    # Verify this is for the selected node
+    if node_id != selected_node_id:
+        return no_update, no_update, no_update
+    
+    # Check if there was an actual click
+    if not button_clicks or not any(x and x > 0 for x in button_clicks):
+        return no_update, no_update, no_update
+    
+    # Initialize hidden_state if needed
+    if not hidden_state:
+        hidden_state = {"upstream": False, "downstream": False, "node_id": None}
+    
+    # Check if nodes are currently hidden for this direction
+    is_currently_hidden = (
+        hidden_state.get("node_id") == selected_node_id and
+        hidden_state.get(direction, False)
+    )
+    
+    if is_currently_hidden:
+        # Show nodes - restore from all_elements
+        # Get nodes that were hidden
+        if direction == "upstream":
+            nodes_to_restore = get_all_upstream_nodes(selected_node_id, all_elements)
+        elif direction == "downstream":
+            nodes_to_restore = get_all_downstream_nodes(selected_node_id, all_elements)
+        else:
+            return no_update, no_update, no_update
+        
+        # Restore all elements (show everything)
+        # But check if the other direction is still hidden
+        other_direction = "downstream" if direction == "upstream" else "upstream"
+        other_hidden = (
+            hidden_state.get("node_id") == selected_node_id and
+            hidden_state.get(other_direction, False)
+        )
+        
+        if other_hidden:
+            # Other direction is still hidden, so filter those out
+            if other_direction == "upstream":
+                nodes_to_keep_hidden = get_all_upstream_nodes(selected_node_id, all_elements)
+            else:
+                nodes_to_keep_hidden = get_all_downstream_nodes(selected_node_id, all_elements)
+            
+            filtered_elements = []
+            for el in all_elements:
+                if "source" not in el.get("data", {}):  # It's a node
+                    node_id_el = el["data"].get("id")
+                    if node_id_el == selected_node_id or node_id_el not in nodes_to_keep_hidden:
+                        filtered_elements.append(el)
+                else:  # It's an edge
+                    source = el["data"].get("source")
+                    target = el["data"].get("target")
+                    if source not in nodes_to_keep_hidden and target not in nodes_to_keep_hidden:
+                        filtered_elements.append(el)
+        else:
+            # No other direction hidden, show everything
+            filtered_elements = all_elements
+        
+        # Update hidden state
+        new_hidden_state = hidden_state.copy()
+        new_hidden_state[direction] = False
+        if not new_hidden_state.get("upstream") and not new_hidden_state.get("downstream"):
+            new_hidden_state["node_id"] = None
+        
+    else:
+        # Hide nodes
+        if direction == "upstream":
+            nodes_to_hide = get_all_upstream_nodes(selected_node_id, all_elements)
+        elif direction == "downstream":
+            nodes_to_hide = get_all_downstream_nodes(selected_node_id, all_elements)
+        else:
+            return no_update, no_update, no_update
+        
+        if not nodes_to_hide:
+            return no_update, no_update, no_update
+        
+        # Check if the other direction is already hidden
+        other_direction = "downstream" if direction == "upstream" else "upstream"
+        other_hidden = (
+            hidden_state.get("node_id") == selected_node_id and
+            hidden_state.get(other_direction, False)
+        )
+        
+        if other_hidden:
+            # Combine with already hidden nodes
+            if other_direction == "upstream":
+                other_hidden_nodes = get_all_upstream_nodes(selected_node_id, all_elements)
+            else:
+                other_hidden_nodes = get_all_downstream_nodes(selected_node_id, all_elements)
+            nodes_to_hide = nodes_to_hide.union(other_hidden_nodes)
+        
+        # Filter current elements to exclude nodes to hide (but keep the selected node)
+        filtered_elements = []
+        for el in current_elements:
+            if "source" not in el.get("data", {}):  # It's a node
+                node_id_el = el["data"].get("id")
+                if node_id_el == selected_node_id or node_id_el not in nodes_to_hide:
+                    filtered_elements.append(el)
+            else:  # It's an edge
+                source = el["data"].get("source")
+                target = el["data"].get("target")
+                if source not in nodes_to_hide and target not in nodes_to_hide:
+                    filtered_elements.append(el)
+        
+        # Update hidden state
+        new_hidden_state = hidden_state.copy()
+        new_hidden_state[direction] = True
+        new_hidden_state["node_id"] = selected_node_id
+    
+    # Update node info panel to reflect new button states
+    # Find the selected node data
+    selected_node_data = None
+    for el in all_elements:
+        if "source" not in el.get("data", {}) and el["data"].get("id") == selected_node_id:
+            selected_node_data = el["data"]
+            break
+    
+    updated_node_info = show_node_info(selected_node_data, all_elements, new_hidden_state)
+    
+    return filtered_elements, new_hidden_state, updated_node_info
+
+
+@app.callback(
+    Output("visualiser-container", "className"),
+    Output("btn-fullscreen", "title"),
+    Input("btn-fullscreen", "n_clicks"),
+    State("fullscreen-mode", "data"),
+    prevent_initial_call=True,
+)
+def toggle_fullscreen(n_clicks, is_fullscreen):
+    """
+    Toggle fullscreen mode for the visualiser.
+    """
+    if not n_clicks:
+        return no_update, no_update
+    
+    new_fullscreen = not is_fullscreen
+    
+    if new_fullscreen:
+        return "fullscreen", "Exit fullscreen (ESC)"
+    else:
+        return "", "Toggle fullscreen"
+
+
+
+
+@app.callback(
+    Output("fullscreen-mode", "data"),
+    Input("visualiser-container", "className"),
+    prevent_initial_call=True,
+)
+def update_fullscreen_state(className):
+    """
+    Update fullscreen state store based on className.
+    """
+    return className == "fullscreen"
+
+
+# Clientside callback for ESC key to exit fullscreen
+app.clientside_callback(
+    """
+    function(className) {
+        if (className === 'fullscreen') {
+            var handleEscape = function(e) {
+                if (e.key === 'Escape') {
+                    var btn = document.getElementById('btn-fullscreen');
+                    if (btn) {
+                        btn.click();
+                    }
+                    document.removeEventListener('keydown', handleEscape);
+                }
+            };
+            document.addEventListener('keydown', handleEscape);
+        }
+        return window.dash_clientside.no_update;
+    }
+    """,
+    Output("fullscreen-mode", "data", allow_duplicate=True),
+    Input("visualiser-container", "className"),
+    prevent_initial_call=True,
+)
 
 
 # --- Main ---
