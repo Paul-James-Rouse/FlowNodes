@@ -678,6 +678,14 @@ app.index_string = '''
             #visualiser-container.fullscreen #cyto-graph {
                 height: calc(100vh - 100px) !important;
             }
+            /* Position fullscreen button in top right corner */
+            #visualiser-container.fullscreen #btn-fullscreen {
+                position: fixed !important;
+                top: 1rem !important;
+                right: 1rem !important;
+                z-index: 10000 !important;
+                margin: 0 !important;
+            }
         </style>
     </head>
     <body>
@@ -1103,17 +1111,23 @@ def toggle_leaves(show_all_clicks, hide_leaves_clicks, leaves_hidden, all_elemen
     State("all-elements", "data"),
     State("hidden-nodes-state", "data"),
     State("cyto-graph", "elements"),
+    State("leaves-hidden", "data"),
     prevent_initial_call='initial_duplicate',
 )
-def update_node_info_panel(tap_node_data, all_elements, hidden_state, current_elements):
+def update_node_info_panel(tap_node_data, all_elements, hidden_state, current_elements, leaves_hidden):
     node_id = tap_node_data.get("id") if tap_node_data else None
     
-    # If selecting a different node, reset hidden state and show all elements
+    # If selecting a different node, reset hidden state but preserve current visible elements
     if node_id and hidden_state and hidden_state.get("node_id") and hidden_state.get("node_id") != node_id:
-        # Reset hidden state
+        # Reset hidden state (since it's tied to the previous node)
         new_hidden_state = {"upstream": False, "downstream": False, "node_id": None}
-        # Show all elements
-        return show_node_info(tap_node_data, all_elements, new_hidden_state), node_id, new_hidden_state, all_elements
+        # Preserve current visible elements (which already have upstream/downstream filtering applied)
+        # Ensure leaves are filtered if needed (current_elements should already have this, but verify)
+        elements_to_return = current_elements if current_elements else all_elements
+        if leaves_hidden and elements_to_return == all_elements:
+            # Only filter if we fell back to all_elements and leaves should be hidden
+            elements_to_return, _ = filter_out_leaves(all_elements, keep_root=True)
+        return show_node_info(tap_node_data, all_elements, new_hidden_state), node_id, new_hidden_state, elements_to_return
     
     # Otherwise, keep current state
     return show_node_info(tap_node_data, all_elements, hidden_state), node_id, no_update, no_update
@@ -1962,9 +1976,10 @@ def apply_to_all_downstream(
     State("all-elements", "data"),
     State("cyto-graph", "elements"),
     State("hidden-nodes-state", "data"),
+    State("leaves-hidden", "data"),
     prevent_initial_call=True,
 )
-def hide_or_show_upstream_or_downstream_nodes(button_clicks, selected_node_id, all_elements, current_elements, hidden_state):
+def hide_or_show_upstream_or_downstream_nodes(button_clicks, selected_node_id, all_elements, current_elements, hidden_state, leaves_hidden):
     """
     Hide or show upstream or downstream nodes from the selected node in the visualiser.
     """
@@ -2044,9 +2059,14 @@ def hide_or_show_upstream_or_downstream_nodes(button_clicks, selected_node_id, a
                     target = el["data"].get("target")
                     if source not in nodes_to_keep_hidden and target not in nodes_to_keep_hidden:
                         filtered_elements.append(el)
+            # Respect leaves-hidden state
+            if leaves_hidden:
+                filtered_elements, _ = filter_out_leaves(filtered_elements, keep_root=True)
         else:
-            # No other direction hidden, show everything
+            # No other direction hidden, show everything (but respect leaves-hidden state)
             filtered_elements = all_elements
+            if leaves_hidden:
+                filtered_elements, _ = filter_out_leaves(all_elements, keep_root=True)
         
         # Update hidden state
         new_hidden_state = hidden_state.copy()
@@ -2152,7 +2172,13 @@ def update_fullscreen_state(className):
 app.clientside_callback(
     """
     function(className) {
+        // Store handler reference globally so we can remove it later
         if (className === 'fullscreen') {
+            // Remove any existing handler first (prevents accumulation)
+            if (window._fullscreenEscapeHandler) {
+                document.removeEventListener('keydown', window._fullscreenEscapeHandler);
+            }
+            
             var handleEscape = function(e) {
                 if (e.key === 'Escape') {
                     var btn = document.getElementById('btn-fullscreen');
@@ -2160,9 +2186,17 @@ app.clientside_callback(
                         btn.click();
                     }
                     document.removeEventListener('keydown', handleEscape);
+                    window._fullscreenEscapeHandler = null;
                 }
             };
+            window._fullscreenEscapeHandler = handleEscape;
             document.addEventListener('keydown', handleEscape);
+        } else {
+            // Remove listener when exiting fullscreen via button
+            if (window._fullscreenEscapeHandler) {
+                document.removeEventListener('keydown', window._fullscreenEscapeHandler);
+                window._fullscreenEscapeHandler = null;
+            }
         }
         return window.dash_clientside.no_update;
     }
