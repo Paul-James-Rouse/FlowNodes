@@ -6,10 +6,12 @@ An interactive web application for visualising and editing FlowJo gating tree ne
 
 ### Network Visualisation
 - **Interactive Graph**: Explore FlowJo gating trees as interactive network diagrams
-- **Multiple Layouts**: Choose between Breadthfirst (hierarchical) or Cose (force-directed) layouts
+- **Multiple Layouts**: Choose between Breadthfirst (hierarchical) or Cose (force-directed) layouts (default: Cose)
 - **Customisable Layout Parameters**: Fine-tune spacing, padding, node repulsion, and edge lengths with intuitive sliders
 - **Zoom & Pan**: Navigate large networks with zoom (0.2x to 2.5x) and pan controls
 - **Show/Hide Leaf Nodes**: Toggle visibility of terminal nodes to focus on the hierarchy structure
+- **Fullscreen Mode**: Click the fullscreen button (⛶) to expand the visualiser to full screen - press ESC to exit
+- **Hide Upstream/Downstream Nodes**: Focus on specific parts of the network by hiding ancestor or descendant nodes
 
 ### Node Editing
 - **Node Selection**: Click any node to view and edit its properties
@@ -89,11 +91,18 @@ python src/app.py
      - **"Apply Colour"** to copy the colour to all descendant nodes
      - **"Apply Shape"** to copy the shape to all descendant nodes
 
+4. **Hide Nodes in Visualiser**:
+   - **Hide Upstream**: Click to hide all ancestor nodes (parents and grandparents)
+   - **Hide Downstream**: Click to hide all descendant nodes (children and grandchildren)
+   - Buttons change to "Show Upstream" / "Show Downstream" when nodes are hidden
+   - Click again to restore hidden nodes
+   - Selecting a different node automatically restores all nodes
+
 ### Layout Controls
 
 **Switch Layouts**:
 - Click "Breadthfirst" for hierarchical tree layout
-- Click "Cose" for force-directed layout
+- Click "Cose" for force-directed layout (default on startup)
 
 **Adjust Parameters** (sliders appear based on selected layout):
 
@@ -110,6 +119,10 @@ python src/app.py
 
 - **Show all nodes**: Displays the complete network including leaf nodes
 - **Hide leaf nodes**: Hides terminal nodes to focus on the hierarchy
+- **Fullscreen Mode**: Click the ⛶ button in the Network Visualisation header to enter fullscreen mode
+  - The visualiser expands to fill the entire screen
+  - Press ESC or click the button again to exit
+  - Perfect for detailed exploration of large networks
 
 ### Export Options
 
@@ -125,15 +138,24 @@ python src/app.py
 - The `parameter` column is empty for you to fill with numeric values
 - Use this exported file as a template for importing colour mappings
 
-**Import CSV**:
+**Import CSV with Viridis Colouring**:
 1. Prepare a CSV file with columns: `node_name`, `shape`, `colour`, `parameter`
 2. Fill the `parameter` column with numeric values you want to visualise
-3. Drag and drop the CSV file into the upload area, or click to select
+3. Drag and drop the CSV file into the upload area, or click "Import CSV with Viridis Colouring"
 4. The application automatically:
    - Validates the file format
    - Applies viridis colour mapping based on parameter values
    - Updates the network visualisation
    - Shows success message or warnings for missing nodes
+
+**Import New WSP File**:
+1. Click "Import New WSP" or drag and drop a `.wsp` file
+2. The application will:
+   - Validate the file format
+   - Replace the current network with the new one
+   - Apply default styling (all nodes start with default colour and ellipse shape)
+   - Start with leaf nodes hidden
+   - Show a success message with the number of elements loaded
 
 ### CSV Import Format
 
@@ -173,6 +195,9 @@ FlowNodes/
 3. **Layout Tuning**: Adjust layout parameters gradually - small changes can have significant visual impact
 4. **PNG Export**: High-resolution exports may take a few seconds for large networks - be patient
 5. **Node Matching**: When importing CSV, ensure node names exactly match the network (check spelling and case)
+6. **Focus on Subnetworks**: Use the Hide Upstream/Downstream buttons to focus on specific parts of large networks
+7. **Fullscreen Exploration**: Use fullscreen mode for detailed examination of complex networks - press ESC to exit quickly
+8. **WSP File Replacement**: You can load different WSP files without restarting the application - useful for comparing different gating strategies
 
 ## Troubleshooting
 
@@ -196,6 +221,11 @@ FlowNodes/
 - Verify the `.wsp` file is valid and not corrupted
 - Try refreshing the page
 
+**WSP file import fails**:
+- Ensure the file has a `.wsp` extension
+- Verify the file is a valid FlowJo workspace file
+- Check that the file is not corrupted or password-protected
+
 ## Technical Details
 
 - **Framework**: Dash (Plotly)
@@ -210,4 +240,4 @@ See LICENSE file for details.
 
 ## Credits
 
-Built for visualizing FlowJo gating trees with interactive network exploration capabilities.
+Built for visualising FlowJo gating trees with interactive network exploration capabilities.
